@@ -1,0 +1,155 @@
+# ============================================
+# Claude Code specific
+# ============================================
+# Local Claude settings (not the plugin structure)
+.claude/settings.local.json
+.claude/cache/
+
+# Session logs and temporary files
+*.session.md
+*.log
+
+# ============================================
+# Dependencies & Build
+# ============================================
+# Node.js
+node_modules/
+npm-debug.log*
+yarn-debug.log*
+yarn-error.log*
+package-lock.json
+yarn.lock
+pnpm-lock.yaml
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.so
+.Python
+env/
+venv/
+ENV/
+build/
+develop-eggs/
+dist/
+downloads/
+eggs/
+.eggs/
+lib/
+lib64/
+parts/
+sdist/
+var/
+wheels/
+*.egg-info/
+.installed.cfg
+*.egg
+MANIFEST
+
+# Build outputs
+dist/
+build/
+*.js.map
+*.d.ts
+
+# ============================================
+# Environment & Secrets
+# ============================================
+.env
+.env.local
+.env.*.local
+*.key
+*.pem
+secrets/
+.secrets/
+
+# API keys and tokens
+**/api_keys.json
+**/credentials.json
+**/.credentials
+
+# ============================================
+# IDE & Editors
+# ============================================
+# VSCode
+.vscode/*
+!.vscode/settings.json
+!.vscode/tasks.json
+!.vscode/launch.json
+!.vscode/extensions.json
+*.code-workspace
+
+# IntelliJ / WebStorm / PyCharm
+.idea/
+*.iml
+*.iws
+*.ipr
+out/
+
+# Vim
+*.swp
+*.swo
+*~
+
+# Emacs
+*~
+\#*\#
+.\#*
+
+# ============================================
+# OS Files
+# ============================================
+# macOS
+.DS_Store
+.AppleDouble
+.LSOverride
+._*
+
+# Windows
+Thumbs.db
+ehthumbs.db
+Desktop.ini
+$RECYCLE.BIN/
+
+# Linux
+*~
+.directory
+.Trash-*
+
+# ============================================
+# Testing & Coverage
+# ============================================
+coverage/
+.nyc_output/
+*.coverage
+.pytest_cache/
+.tox/
+
+# ============================================
+# Temporary & Cache
+# ============================================
+*.tmp
+*.temp
+*.cache
+.cache/
+tmp/
+temp/
+
+# ============================================
+# Documentation (optional)
+# ============================================
+# Uncomment if you don't want to track generated docs
+# docs/_build/
+# site/
+
+# ============================================
+# IMPORTANT: DO NOT IGNORE
+# ============================================
+# These are essential for Claude Code plugins:
+# !.claude-plugin/
+# !**/plugin.json
+# !**/marketplace.json
+# !**/*.md (SKILL.md, command.md, etc.)
+# !**/hooks.json
+# !**/.mcp.json

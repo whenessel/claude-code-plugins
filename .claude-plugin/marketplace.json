@@ -1,0 +1,9 @@
+{
+  "name": "whenessel-plugins",
+  "owner": {
+    "name": "Artem",
+    "url": "https://github.com/whenessel"
+  },
+  "description": "Custom Claude Code plugins for AI-assisted development",
+  "plugins": []
+}
