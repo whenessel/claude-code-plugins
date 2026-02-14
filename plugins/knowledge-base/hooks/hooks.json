@@ -1,0 +1,25 @@
+{
+  "description": "Knowledge entry update notifications",
+  "hooks": {
+    "PostToolUse": [
+      {
+        "matcher": "Write|Edit",
+        "hooks": [
+          {
+            "type": "command",
+            "command": "echo '✓ Knowledge entry updated. Run /knowledge-reindex to update catalog.'",
+            "description": "Notify about knowledge entry updates",
+            "condition": {
+              "filePattern": ".kb/**/*.md",
+              "excludePatterns": [
+                ".kb/README.md",
+                ".kb/TEMPLATE.md",
+                ".kb/*/README.md"
+              ]
+            }
+          }
+        ]
+      }
+    ]
+  }
+}

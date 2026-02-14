@@ -5,5 +5,11 @@
     "url": "https://github.com/whenessel"
   },
   "description": "Custom Claude Code plugins for AI-assisted development",
-  "plugins": []
+  "plugins": [
+    {
+      "name": "knowledge-base",
+      "source": "./plugins/knowledge-base",
+      "description": "Build and improve a knowledge base of development guidelines including conventions, rules, styles, and practices with AI-driven research and validation"
+    }
+  ]
 }

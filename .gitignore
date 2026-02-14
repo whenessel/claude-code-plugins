@@ -5,6 +5,9 @@
 .claude/settings.local.json
 .claude/cache/
 
+# Claude temporary files
+**/.claude/plans/
+
 # Session logs and temporary files
 *.session.md
 *.log
