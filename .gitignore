@@ -156,3 +156,4 @@ temp/
 # !**/*.md (SKILL.md, command.md, etc.)
 # !**/hooks.json
 # !**/.mcp.json
+/.mcp.json
