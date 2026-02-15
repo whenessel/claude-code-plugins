@@ -2,6 +2,52 @@
 
 All notable changes to the Knowledge Base Plugin will be documented in this file.
 
+## 2026-02-15: Codebase Discovery - `/knowledge-scan`
+
+### Added
+- **`/knowledge-scan` command** - Automatically discover de-facto conventions from existing codebase
+- **`knowledge-scanner` agent** - Orchestrates two-phase discovery and generation workflow
+- **`knowledge-codebase-discover` skill** - Analyzes codebase patterns with Grep/Glob
+
+### Features
+- **Two-phase workflow**: Discovery → Interactive plan → Selective generation
+- **Auto mode (`--auto`)**: Automatically generate high-confidence (≥80%) conventions
+- **Confidence scoring**: Evidence-based scores guide decision-making
+- **Conflict detection**: Compares discovered patterns with existing entries
+- **Multi-language support**: TypeScript, JavaScript, React, Python detection
+- **Dimension registry**: Extensible pattern analysis (naming, structure, patterns, docs)
+- **Session memory**: Discovery plan persists for selective generation
+- **Batch processing**: Generate multiple conventions in one command
+
+### Discovery Dimensions
+- General: file/directory naming
+- TypeScript: functions, classes, imports, exports, error handling, JSDoc
+- React: components, hooks, state management
+- Python: functions, classes, modules, docstrings, error handling
+
+### Workflow
+```bash
+# Phase 1: Discovery
+/knowledge-scan src/
+
+# Phase 2: Generation
+/knowledge-scan generate 1,3,5
+
+# Or: Auto mode
+/knowledge-scan src/ --auto
+```
+
+### Technical Details
+- **Performance**: ~180 tool calls for full scan of 500-file project (<60s)
+- **Optimizations**: Grouped Glob, shared Read calls, `grep -l` for file lists
+- **Reuse**: Delegates to existing `knowledge-writer` → `knowledge-draft` for generation
+
+### Version
+- Plugin version: `1.0.0` → `1.1.0`
+- Keywords: added `"codebase-scan"`
+
+---
+
 ## 2026-02-14: Major Refactoring - Conventions → Knowledge Base
 
 ### Breaking Changes

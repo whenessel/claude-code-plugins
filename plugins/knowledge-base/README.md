@@ -9,6 +9,7 @@ Transform informal coding guidelines into structured, AI-friendly documentation 
 **Key Features:**
 - 🤖 AI-driven convention generation from natural language
 - 📚 Automatic research of codebase patterns and best practices
+- 🔍 Codebase scanning to discover de-facto conventions automatically
 - 🎯 Three complexity tiers (simple, standard, comprehensive)
 - 🌍 Multi-language support (input in Russian/English, output in English)
 - 📊 Automatic indexing and cataloging
@@ -54,7 +55,20 @@ claude plugins list
 
 ## Quick Start
 
-### Create Your First Convention
+### Discover Conventions from Existing Code
+
+```bash
+# Scan your codebase
+/knowledge-scan src/
+
+# Generate selected conventions from discovery plan
+/knowledge-scan generate 1,3,5
+
+# Or auto-generate high-confidence conventions
+/knowledge-scan src/ --auto
+```
+
+### Create Conventions Manually
 
 ```bash
 # Simple example
@@ -120,6 +134,49 @@ Create a standardized convention file from raw guidelines.
 - Language (Russian/English input)
 - Scope and category from guidelines
 - Research needs ("best practices" trigger)
+
+---
+
+### `/knowledge-scan` - Discover Conventions
+
+Automatically discover de-facto conventions from existing codebase.
+
+**Syntax:**
+```bash
+/knowledge-scan [directory] [--auto]
+```
+
+**Modes:**
+- **Discovery mode (default):** Analyze codebase and present interactive plan
+- **Auto mode (`--auto`):** Automatically generate high-confidence conventions
+- **Generation mode:** Select specific conventions from discovery plan
+
+**Examples:**
+```bash
+# Discover conventions in src/
+/knowledge-scan src/
+
+# Auto-generate high-confidence conventions
+/knowledge-scan src/ --auto
+
+# Generate specific conventions from plan
+/knowledge-scan generate 1,3,5
+```
+
+**What it does:**
+- Detects stack from package.json, tsconfig.json, etc.
+- Analyzes file patterns and naming conventions
+- Searches for code patterns with Grep/Glob
+- Calculates confidence scores for discovered patterns
+- Detects conflicts with existing knowledge entries
+- Generates conventions from discovered patterns
+
+**Discovery dimensions:**
+- File and directory naming
+- Function/class naming conventions
+- Import/export patterns
+- Error handling patterns
+- Documentation styles (JSDoc, docstrings)
 
 ---
 
@@ -260,14 +317,41 @@ The plugin accepts any scope (e.g., `golang`, `vue`, `django`) and creates appro
 
 ## Research Features
 
-The plugin automatically researches when:
+### Automatic Codebase Discovery (`/knowledge-scan`)
+
+The `/knowledge-scan` command discovers conventions from existing code patterns:
+
+**When to use:**
+- Starting new project documentation
+- Discovering existing team patterns
+- Documenting legacy codebase
+- Validating manual conventions
+
+**How it works:**
+1. Detects stack (TypeScript, React, Python, etc.)
+2. Analyzes patterns across multiple dimensions
+3. Calculates confidence scores (evidence-based)
+4. Presents interactive plan with conflict detection
+5. Generates conventions from actual code samples
+
+**Advantages:**
+- Evidence-based with confidence scores
+- Batch discovery and generation
+- Conflict detection with existing entries
+- Enriched with real code examples
+
+### Manual Entry Research (`/knowledge-add`)
+
+The plugin automatically researches when creating manual entries:
+
+**Research triggers:**
 - User mentions "best practices" or "industry standard"
 - Input is vague (<3 specific rules)
 - Topic is well-established
 
 **Research sources:**
 
-1. **Codebase** (always):
+1. **Codebase** (conditional):
    - Code patterns via grep
    - Linter configs (.eslintrc, tsconfig.json, etc.)
    - Existing conventions
@@ -290,37 +374,41 @@ The plugin automatically researches when:
 ### Plugin Structure
 
 ```
-conventions/
+knowledge-base/
 ├── .claude-plugin/
 │   └── plugin.json              # Plugin manifest
 ├── agents/
-│   ├── convention-writer.md     # Orchestrator agent
-│   └── convention-evaluator.md  # Quality evaluation agent
+│   ├── knowledge-writer.md      # Entry generation agent
+│   ├── knowledge-evaluator.md   # Quality evaluation agent
+│   └── knowledge-scanner.md     # Codebase discovery agent
 ├── skills/
-│   ├── draft-convention/        # Convention transformation skill
+│   ├── knowledge-draft/         # Entry transformation skill
 │   │   ├── SKILL.md
 │   │   ├── template.md
 │   │   └── examples.md
-│   └── convention-evaluate/     # Quality evaluation skill
+│   ├── knowledge-evaluate/      # Quality evaluation skill
+│   │   └── SKILL.md
+│   └── knowledge-codebase-discover/ # Codebase analysis skill
 │       └── SKILL.md
 ├── commands/
-│   ├── convention.md            # /knowledge-add command
-│   ├── rebuild-index.md         # /knowledge-reindex command
-│   └── knowledge-report.md     # /knowledge-report command
+│   ├── knowledge-add.md         # /knowledge-add command
+│   ├── knowledge-scan.md        # /knowledge-scan command
+│   ├── knowledge-reindex.md     # /knowledge-reindex command
+│   └── knowledge-report.md      # /knowledge-report command
 └── hooks/
     └── hooks.json               # PostToolUse notifications
 ```
 
-### Pipeline Flow
+### Pipeline Flow: Manual Entry Creation
 
 ```
 User Input
     ↓
 /knowledge-add command (interactive if needed)
     ↓
-convention-writer agent (orchestrator)
+knowledge-writer agent (orchestrator)
     ↓
-draft-convention skill:
+knowledge-draft skill:
     1. Parse input
     2. Detect language (Russian/English)
     3. Determine if research needed
@@ -341,6 +429,48 @@ PostToolUse hook → Notification
 User runs /knowledge-reindex
     ↓
 .kb/README.md generated
+```
+
+### Pipeline Flow: Automatic Discovery
+
+```
+User: /knowledge-scan src/
+    ↓
+knowledge-scan command (parse args, detect mode)
+    ↓
+knowledge-scanner agent (orchestrator)
+    ↓
+Phase 1: Discovery
+    knowledge-codebase-discover skill:
+    1. Detect stack (package.json, tsconfig, etc.)
+    2. Build dimension registry for detected languages
+    3. For each dimension:
+       - Grep/Glob for patterns
+       - Sample code from matching files
+       - Calculate confidence score
+    4. Return discovery plan
+    ↓
+knowledge-scanner agent:
+    1. Parse plan
+    2. Detect conflicts with existing .kb/ entries
+    3. Store plan in session memory
+    4. Present interactive plan to user
+    ↓
+User: /knowledge-scan generate 1,3,5
+    ↓
+Phase 2: Generation
+    knowledge-scanner agent:
+    1. Retrieve plan from session memory
+    2. For each selected convention:
+       - Check for conflicts
+       - Build enriched guidelines from evidence
+       - Delegate to knowledge-writer agent
+    ↓
+knowledge-writer agent → knowledge-draft skill
+    ↓
+.kb/{scope}/{category}/{name}.md (created or updated)
+    ↓
+PostToolUse hook → Notification
 ```
 
 ---
@@ -479,5 +609,5 @@ MIT License - see repository for details
 ---
 
 **Author:** Artem Demidenko
-**Version:** 1.0.0
-**Plugin:** conventions
+**Version:** 1.1.0
+**Plugin:** knowledge-base

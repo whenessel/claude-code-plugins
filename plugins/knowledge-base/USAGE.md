@@ -71,7 +71,172 @@ Quality: 8.7/10 (Clarity: 9, Format: 9, Structure: 9, Completeness: 8, Efficienc
 
 ## Command Reference
 
-### `/convention` - Create Convention
+### `/knowledge-scan` - Discover Conventions
+
+Automatically discover de-facto conventions from existing codebase.
+
+#### Syntax
+
+```bash
+/knowledge-scan [directory] [--auto]
+```
+
+#### Arguments
+
+- `directory` (optional) - Directory to scan (default: current working directory)
+- `--auto` (optional) - Auto-generate high-confidence conventions (≥80%)
+
+#### Workflow
+
+**Step 1: Discovery Mode**
+```bash
+/knowledge-scan src/
+```
+
+Analyzes the codebase and presents an interactive plan:
+
+```
+🔍 Scanning codebase in src/...
+
+Detected stack:
+- TypeScript (156 files)
+- React (package.json)
+
+📊 Discovery Plan:
+
+[1] typescript/naming/functions - 94% confidence
+    Pattern: camelCase + verb-prefix + async naming
+    Evidence: 156 matching files
+    Examples: getUserData, fetchApiResponse, handleClick
+
+[2] typescript/naming/variables - 87% confidence
+    Pattern: camelCase, descriptive, >3 chars
+    Evidence: 142 matching files
+
+[3] typescript/structure/imports - 76% confidence
+    Pattern: absolute imports, grouped by source
+    Evidence: 98 matching files
+
+⚠ [4] react/patterns/hooks - 58% confidence (low)
+    Pattern: useState for local, Context for shared
+    Evidence: 23 matching files
+
+✓ High confidence (≥80%): 2 conventions
+✓ Medium confidence (60-79%): 1 convention
+⚠ Low confidence (<60%): 1 convention
+
+What would you like to do?
+1. Generate high-confidence conventions (1-2)
+2. Select specific conventions to generate
+3. Generate all conventions
+4. Cancel
+```
+
+**Step 2: Generate Selected Conventions**
+```bash
+# Generate conventions 1 and 3
+/knowledge-scan generate 1,3
+```
+
+**Or use auto mode:**
+```bash
+# Automatically generate all high-confidence (≥80%) conventions
+/knowledge-scan src/ --auto
+```
+
+#### Conflict Resolution
+
+When a discovered convention conflicts with existing entry:
+
+```
+⚠ Conflict detected: .kb/typescript/naming/functions.md (v1.2)
+
+Existing:
+  Rules: camelCase, verb-based, max 3 words
+  Examples: 6 code blocks
+
+Discovered (94% confidence, 156 files):
+  Additional patterns: async naming rules, arrow function patterns
+  New evidence: 12 code samples from codebase
+
+Options:
+[update]  Merge new patterns into existing entry (v1.2 → v1.3)
+[skip]    Keep existing entry unchanged
+[replace] Full overwrite with discovered patterns (v1.2 → v2.0, requires confirmation)
+
+Your choice:
+```
+
+#### Discovery Dimensions
+
+The scanner analyzes multiple dimensions based on detected stack:
+
+**General (always)**
+- File naming conventions
+- Directory structure patterns
+
+**TypeScript/JavaScript**
+- Function naming (camelCase, verb-prefix, etc.)
+- Class naming (PascalCase, etc.)
+- Import/export patterns
+- Error handling patterns
+- JSDoc documentation style
+
+**React**
+- Component naming
+- Hook usage patterns
+- State management patterns
+
+**Python**
+- Function naming (snake_case, etc.)
+- Class naming (PascalCase, etc.)
+- Module structure
+- Docstring patterns
+- Error handling
+
+#### Confidence Scores
+
+- **≥80%**: High confidence → auto-generated in `--auto` mode
+- **60-79%**: Medium confidence → included in plan, manual selection
+- **<60%**: Low confidence → shown but flagged as uncertain
+
+Confidence = dominant_pattern_percentage × sample_size_factor × clarity_bonus
+
+#### Examples
+
+**Example 1: Full workflow**
+```bash
+# Discover conventions
+/knowledge-scan src/
+
+# Review plan, select conventions 1, 2, and 5
+/knowledge-scan generate 1,2,5
+
+# Update catalog
+/knowledge-reindex
+```
+
+**Example 2: Auto mode**
+```bash
+# Automatically generate high-confidence conventions
+/knowledge-scan src/ --auto
+
+# Check results
+cat .kb/README.md
+```
+
+**Example 3: Specific directory**
+```bash
+# Scan only API routes
+/knowledge-scan src/api/routes/
+
+# Scan components
+/knowledge-scan src/components/
+```
+
+---
+
+### `/knowledge-add` - Create Convention
 
 Create a standardized convention file from raw guidelines.
 
@@ -311,6 +476,38 @@ This convention meets comprehensive quality standards with minor areas for impro
 ---
 
 ## Usage Patterns
+
+### Workflow 0: Automatic Discovery (New!)
+
+For discovering conventions from existing code:
+
+```bash
+# 1. Scan codebase
+/knowledge-scan src/
+
+# 2. Review discovery plan
+# (Interactive plan shown with confidence scores)
+
+# 3. Generate selected conventions
+/knowledge-scan generate 1,3,5
+
+# 4. Update catalog
+/knowledge-reindex
+```
+
+**Use when:**
+- Starting new project documentation
+- Discovering existing team patterns
+- Documenting legacy codebase conventions
+- Validating manual conventions against actual code
+
+**Advantages:**
+- Evidence-based: conventions derived from actual code
+- Confidence scores guide decision-making
+- Conflict detection prevents duplicates
+- Batch generation saves time
+
+---
 
 ### Workflow 1: Quick Convention
 
@@ -825,6 +1022,47 @@ What would you like to do? [1/2/3]
 ---
 
 ## Common Scenarios
+
+### Scenario 0: Documenting Existing Codebase (New!)
+
+Automatically discover and document conventions from existing code:
+
+```bash
+# 1. Scan main source directory
+/knowledge-scan src/
+
+# Review discovery plan:
+# [1] typescript/naming/functions - 94% confidence (156 files)
+# [2] typescript/naming/variables - 87% confidence (142 files)
+# [3] typescript/structure/imports - 76% confidence (98 files)
+# [4] react/patterns/hooks - 58% confidence (23 files)
+
+# 2. Generate high and medium confidence conventions
+/knowledge-scan generate 1,2,3
+
+# 3. Review generated entries
+cat .kb/typescript/naming/functions.md
+cat .kb/typescript/naming/variables.md
+cat .kb/typescript/structure/imports.md
+
+# 4. For low-confidence patterns, create manually with more context
+/knowledge-add React state management: useState for local state, Context for shared state, avoid prop drilling >2 levels
+
+# 5. Update catalog
+/knowledge-reindex
+
+# 6. Share with team
+git add .kb/
+git commit -m "docs: add discovered coding conventions"
+```
+
+**Benefits:**
+- Fast initial documentation from existing patterns
+- Evidence-based with real code examples
+- Identifies inconsistencies (low confidence scores)
+- Validates conventions against actual codebase
+
+---
 
 ### Scenario 1: Team Onboarding
 
