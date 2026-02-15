@@ -4,6 +4,13 @@ description: Rebuild .kb/ index (README.md catalog)
 argument-hint: "[--review]"
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Rebuild Knowledge Base Index
 
 Scan all knowledge entries and update README.md catalog with organized listings.
@@ -38,57 +45,28 @@ Exclude:
 
 For each found file, extract information using Read tool:
 
-**Extract YAML front matter:**
-```python
-Parse YAML between --- markers:
-- type
-- version
-- scope
-- category
-- tags
-```
+For each file, use **Read** to load its content, then parse mentally:
 
-**Extract title:**
-```python
-Find first H1 heading (# Title)
-```
-
-**Extract description:**
-```python
-Get first paragraph after title (optional, for preview)
-```
+- **YAML front matter**: Identify text between the first `---` and the second `---`, extract fields: type, version, scope, category, tags
+- **Title**: Find the first H1 heading (`# Title`)
+- **Description**: Get the first paragraph after the title (optional, for preview)
 
 **Build data structure:**
-```python
-convention = {
-  "path": relative_path_from_.knowledge entries,
-  "title": extracted_title,
-  "version": frontmatter.version,
-  "scope": frontmatter.scope,
-  "category": frontmatter.category,
-  "tags": frontmatter.tags
-}
+```yaml
+convention:
+  path: "{relative path from .kb}"
+  title: "{extracted title}"
+  version: "{frontmatter version}"
+  scope: "{frontmatter scope}"
+  category: "{frontmatter category}"
+  tags: "{frontmatter tags}"
 ```
 
 ### Step 3: Organize Conventions
 
 Group knowledge entries by scope, then by category:
 
-```python
-organized = {}
-
-for convention in knowledge entries:
-  scope = convention["scope"]
-  category = convention["category"]
-
-  if scope not in organized:
-    organized[scope] = {}
-
-  if category not in organized[scope]:
-    organized[scope][category] = []
-
-  organized[scope][category].append(convention)
-```
+Group all extracted convention data by scope, then by category within each scope. For each convention, place it under `organized[scope][category]` as a list.
 
 Sort:
 - Scopes alphabetically (but `general` last)

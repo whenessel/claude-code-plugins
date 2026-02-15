@@ -157,3 +157,4 @@ temp/
 # !**/hooks.json
 # !**/.mcp.json
 /.mcp.json
+/drafts/

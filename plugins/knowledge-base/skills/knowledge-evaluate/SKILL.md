@@ -9,6 +9,13 @@ allowed-tools: Read, Grep
 context: fork
 ---
 
+> **⚠️ EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Entry Quality Evaluation Skill
 
 Evaluates knowledge entries using a 5-criteria framework with dual execution modes.
@@ -102,34 +109,21 @@ Mode: fast
 
 ### Step 1: Read and Parse File
 
-```python
-# Read knowledge entry
-content = Read(file_path)
-
-# Parse YAML frontmatter
-yaml_match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
-if not yaml_match:
-    return error("Missing YAML frontmatter")
-
-metadata = yaml.safe_load(yaml_match.group(1))
-body = content[yaml_match.end():]
-
-# Extract sections
-sections = parse_markdown_sections(body)
-
-# Extract code blocks
-code_blocks = extract_code_blocks(body)
-
-# Extract rules
-rules = extract_numbered_rules(sections.get("Rules", ""))
-```
+1. Use **Read** tool to load the knowledge entry file at the given `file_path`.
+2. Mentally parse the YAML frontmatter: locate the opening `---` and closing `---` delimiters, extract all key-value pairs (type, version, scope, category, tags, etc.) into a `metadata` structure. If no YAML frontmatter is found, return an error: "Missing YAML frontmatter".
+3. Separate the `body` (everything after the closing `---`) from the frontmatter.
+4. Split the body into sections by `## ` headings — each heading name maps to its content below it.
+5. Extract all code blocks from the body by identifying triple-backtick fenced regions, noting the language tag (if any) and the code content of each block.
+6. Extract numbered rules from the "Rules" section by identifying lines matching the pattern `^\s*\d+\.\s+(.+)$`.
 
 ### Step 2: Score Each Criterion
 
 **Clarity (Fast Mode):**
 
-```python
-def score_clarity_fast(sections, code_blocks, rules):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_clarity_fast(sections, code_blocks, rules):
     score = 0
     issues = []
 
@@ -139,7 +133,7 @@ def score_clarity_fast(sections, code_blocks, rules):
     if allowed_examples >= 4:
         score += 2
     else:
-        issues.append(f"Allowed section has only {allowed_examples} examples (target: 4+)")
+        issues.append("Allowed section has only {allowed_examples} examples (target: 4+)")
 
     # Forbidden section examples
     forbidden = sections.get("Forbidden", "")
@@ -147,22 +141,22 @@ def score_clarity_fast(sections, code_blocks, rules):
     if forbidden_examples >= 4:
         score += 2
     else:
-        issues.append(f"Forbidden section has only {forbidden_examples} examples (target: 4+)")
+        issues.append("Forbidden section has only {forbidden_examples} examples (target: 4+)")
 
     # Rules count
     if len(rules) >= 7:
         score += 3
     elif len(rules) >= 5:
         score += 2
-        issues.append(f"Rules section has {len(rules)} rules (target: 7+)")
+        issues.append("Rules section has {len(rules)} rules (target: 7+)")
     else:
-        issues.append(f"Insufficient rules: {len(rules)} (target: 7+)")
+        issues.append("Insufficient rules: {len(rules)} (target: 7+)")
 
     # Total code blocks
     if len(code_blocks) >= 12:
         score += 2
     else:
-        issues.append(f"Only {len(code_blocks)} code blocks (target: 12+)")
+        issues.append("Only {len(code_blocks)} code blocks (target: 12+)")
 
     # Auto-grant language specificity
     score += 1
@@ -172,8 +166,10 @@ def score_clarity_fast(sections, code_blocks, rules):
 
 **Clarity (Deep Mode):**
 
-```python
-def score_clarity_deep(sections, code_blocks, rules):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_clarity_deep(sections, code_blocks, rules):
     score, issues = score_clarity_fast(sections, code_blocks, rules)
 
     # Remove auto-granted point
@@ -181,35 +177,37 @@ def score_clarity_deep(sections, code_blocks, rules):
 
     # Analyze vague language in rules
     vague_patterns = [
-        r'\bshould consider\b',
-        r'\btry to\b',
-        r'\bgenerally\b',
-        r'\bmight\b',
-        r'\bcould\b',
-        r'\bpossibly\b'
+        \bshould consider\b,
+        \btry to\b,
+        \bgenerally\b,
+        \bmight\b,
+        \bcould\b,
+        \bpossibly\b
     ]
 
     rules_text = sections.get("Rules", "")
     vague_count = 0
-    for pattern in vague_patterns:
-        matches = re.findall(pattern, rules_text, re.IGNORECASE)
-        vague_count += len(matches)
+    for each pattern in vague_patterns:
+        count occurrences of pattern in rules_text (case-insensitive)
+        vague_count += number of matches
 
     if vague_count == 0:
         score += 1  # Full language specificity point
     elif vague_count <= 2:
         score += 0.5
-        issues.append(f"Some vague language detected ({vague_count} instances)")
+        issues.append("Some vague language detected ({vague_count} instances)")
     else:
-        issues.append(f"Excessive vague language ({vague_count} instances) - use 'must' instead of 'should'")
+        issues.append("Excessive vague language ({vague_count} instances) - use 'must' instead of 'should'")
 
     return score, issues
 ```
 
 **Format:**
 
-```python
-def score_format(content, sections, code_blocks, metadata):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_format(content, sections, code_blocks, metadata):
     score = 0
     issues = []
 
@@ -219,23 +217,23 @@ def score_format(content, sections, code_blocks, metadata):
     if not missing:
         score += 2
     else:
-        issues.append(f"Missing YAML fields: {', '.join(missing)}")
+        issues.append("Missing YAML fields: {missing}")
 
     # Format section
     format_section = sections.get("Format", "")
-    bullet_count = len(re.findall(r'^\s*[-*]\s+\*\*', format_section, re.MULTILINE))
+    bullet_count = count lines matching ^\s*[-*]\s+\*\* in format_section (multiline)
     if bullet_count >= 4:
         score += 2
     else:
-        issues.append(f"Format section has {bullet_count} bullets (target: 4+)")
+        issues.append("Format section has {bullet_count} bullets (target: 4+)")
 
     # Code block language tags
-    untagged = sum(1 for cb in code_blocks if not cb.get('language'))
+    untagged = count code_blocks where language tag is empty
     tagged_ratio = 1 - (untagged / len(code_blocks)) if code_blocks else 0
     if tagged_ratio >= 0.9:
         score += 2
     else:
-        issues.append(f"{untagged} code blocks missing language tags")
+        issues.append("{untagged} code blocks missing language tags")
 
     # Heading hierarchy
     headings = extract_headings(content)
@@ -252,17 +250,19 @@ def score_format(content, sections, code_blocks, metadata):
         score += 2
     elif table_rows >= 3:
         score += 1
-        issues.append(f"Summary table has {table_rows} rows (target: 5+)")
+        issues.append("Summary table has {table_rows} rows (target: 5+)")
     else:
-        issues.append(f"Summary table too small: {table_rows} rows (target: 5+)")
+        issues.append("Summary table too small: {table_rows} rows (target: 5+)")
 
     return score, issues
 ```
 
 **Structure:**
 
-```python
-def score_structure(sections):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_structure(sections):
     score = 0
     issues = []
 
@@ -272,7 +272,7 @@ def score_structure(sections):
     if not missing:
         score += 3
     else:
-        issues.append(f"Missing required sections: {', '.join(missing)}")
+        issues.append("Missing required sections: {missing}")
         score += max(0, 3 - len(missing))
 
     # Logical section order
@@ -284,17 +284,17 @@ def score_structure(sections):
         issues.append("Section order differs from standard (Format → Allowed → Forbidden → Rules)")
 
     # Domain subsections (h3)
-    h3_count = sum(1 for h in extract_headings(sections) if h['level'] == 3)
+    h3_count = count headings at level 3 within sections
     if h3_count >= 6:
         score += 2
     elif h3_count >= 4:
         score += 1
-        issues.append(f"Only {h3_count} subsections (target: 6+ for comprehensive coverage)")
+        issues.append("Only {h3_count} subsections (target: 6+ for comprehensive coverage)")
     else:
-        issues.append(f"Insufficient subsections: {h3_count} (target: 6+)")
+        issues.append("Insufficient subsections: {h3_count} (target: 6+)")
 
     # Cross-references
-    cross_refs = re.findall(r'\[.*?\]\(.*?\.md\)', ' '.join(sections.values()))
+    cross_refs = find all matches of \[.*?\]\(.*?\.md\) across all section content
     if len(cross_refs) >= 2:
         score += 1
     elif len(cross_refs) == 1:
@@ -316,8 +316,10 @@ def score_structure(sections):
 
 **Completeness (Fast Mode):**
 
-```python
-def score_completeness_fast(sections, code_blocks):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_completeness_fast(sections, code_blocks):
     score = 0
     issues = []
 
@@ -325,14 +327,14 @@ def score_completeness_fast(sections, code_blocks):
     if len(code_blocks) >= 12:
         score += 2
     else:
-        issues.append(f"Only {len(code_blocks)} code examples (target: 12+)")
+        issues.append("Only {len(code_blocks)} code examples (target: 12+)")
 
     # Example variety (different patterns)
     unique_patterns = count_unique_code_patterns(code_blocks)
     if unique_patterns >= 4:
         score += 2
     else:
-        issues.append(f"Limited example variety: {unique_patterns} patterns (target: 4+)")
+        issues.append("Limited example variety: {unique_patterns} patterns (target: 4+)")
 
     # Positive/negative balance
     allowed_examples = count_code_blocks(sections.get("Allowed", ""))
@@ -340,14 +342,14 @@ def score_completeness_fast(sections, code_blocks):
     if allowed_examples >= 4 and forbidden_examples >= 4:
         score += 2
     else:
-        issues.append(f"Imbalanced examples: {allowed_examples} allowed, {forbidden_examples} forbidden (target: 4+ each)")
+        issues.append("Imbalanced examples: {allowed_examples} allowed, {forbidden_examples} forbidden (target: 4+ each)")
 
     # Context description
     description = sections.get("Description", "")
     if len(description.strip()) >= 300:
         score += 2
     else:
-        issues.append(f"Brief description ({len(description)} chars, target: 300+)")
+        issues.append("Brief description ({len(description)} chars, target: 300+)")
 
     # Summary table
     summary = sections.get("Summary", "")
@@ -356,15 +358,17 @@ def score_completeness_fast(sections, code_blocks):
     if cols >= 3 and rows >= 5:
         score += 2
     else:
-        issues.append(f"Summary table: {cols} cols × {rows} rows (target: 3+ cols, 5+ rows)")
+        issues.append("Summary table: {cols} cols x {rows} rows (target: 3+ cols, 5+ rows)")
 
     return score, issues
 ```
 
 **Completeness (Deep Mode):**
 
-```python
-def score_completeness_deep(sections, code_blocks):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_completeness_deep(sections, code_blocks):
     score, issues = score_completeness_fast(sections, code_blocks)
 
     # Replace example variety with edge case analysis
@@ -377,8 +381,8 @@ def score_completeness_deep(sections, code_blocks):
         'null', 'undefined', 'zero', 'negative'
     ]
 
-    content = ' '.join(sections.values()).lower()
-    edge_mentions = sum(1 for keyword in edge_case_keywords if keyword in content)
+    content = join all section values, lowercased
+    edge_mentions = count how many of edge_case_keywords appear in content
 
     if edge_mentions >= 3:
         score += 2
@@ -386,35 +390,37 @@ def score_completeness_deep(sections, code_blocks):
         score += 1
         issues.append("Limited edge case coverage (add 1-2 more edge cases)")
     else:
-        issues.append(f"Insufficient edge case coverage ({edge_mentions} mentions, target: 3+)")
+        issues.append("Insufficient edge case coverage ({edge_mentions} mentions, target: 3+)")
 
     return score, issues
 ```
 
 **Efficiency (Fast Mode):**
 
-```python
-def score_efficiency_fast(content, sections, code_blocks, metadata):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_efficiency_fast(content, sections, code_blocks, metadata):
     score = 0
     issues = []
 
-    line_count = len(content.split('\n'))
+    line_count = number of lines in content
 
     # Optimal line count (400-650)
     if 400 <= line_count <= 650:
         score += 3
     elif 350 <= line_count < 400:
         score += 2
-        issues.append(f"Line count below optimal ({line_count}, target: 400-650)")
+        issues.append("Line count below optimal ({line_count}, target: 400-650)")
     elif 650 < line_count <= 700:
         score += 2
-        issues.append(f"Line count above optimal ({line_count}, target: 400-650)")
+        issues.append("Line count above optimal ({line_count}, target: 400-650)")
     else:
         score += 1
-        issues.append(f"Line count outside optimal range ({line_count}, target: 400-650)")
+        issues.append("Line count outside optimal range ({line_count}, target: 400-650)")
 
     # Example-to-prose ratio
-    code_chars = sum(len(cb.get('code', '')) for cb in code_blocks)
+    code_chars = sum of character lengths of all code block contents
     total_chars = len(content)
     ratio = code_chars / total_chars if total_chars > 0 else 0
 
@@ -422,74 +428,78 @@ def score_efficiency_fast(content, sections, code_blocks, metadata):
         score += 2
     elif 0.25 <= ratio < 0.30 or 0.50 < ratio <= 0.55:
         score += 1
-        issues.append(f"Example ratio {ratio:.1%} slightly off (target: 30-50%)")
+        issues.append("Example ratio {ratio} slightly off (target: 30-50%)")
     else:
-        issues.append(f"Example ratio {ratio:.1%} outside optimal range (target: 30-50%)")
+        issues.append("Example ratio {ratio} outside optimal range (target: 30-50%)")
 
     # Balanced sections
-    section_sizes = {name: len(text) for name, text in sections.items()}
+    section_sizes = {name: len(text) for each section}
     total_size = sum(section_sizes.values())
     max_section_pct = max(size / total_size for size in section_sizes.values()) if total_size > 0 else 0
 
     if max_section_pct <= 0.40:
         score += 2
     else:
-        largest = max(section_sizes, key=section_sizes.get)
-        issues.append(f"Unbalanced sections: '{largest}' is {max_section_pct:.0%} of content (max: 40%)")
+        largest = section with maximum size
+        issues.append("Unbalanced sections: '{largest}' is {max_section_pct} of content (max: 40%)")
 
     # Average sentence length
-    sentences = re.split(r'[.!?]\s+', content)
-    avg_words = sum(len(s.split()) for s in sentences) / len(sentences) if sentences else 0
+    sentences = split content by [.!?] followed by whitespace
+    avg_words = sum(word count per sentence) / len(sentences) if sentences else 0
 
     if avg_words <= 25:
         score += 2
     elif avg_words <= 30:
         score += 1
-        issues.append(f"Average sentence length {avg_words:.1f} words (target: ≤25)")
+        issues.append("Average sentence length {avg_words} words (target: <=25)")
     else:
-        issues.append(f"Complex sentences: avg {avg_words:.1f} words (target: ≤25)")
+        issues.append("Complex sentences: avg {avg_words} words (target: <=25)")
 
     # Tags count
     tags = metadata.get('tags', [])
     if 4 <= len(tags) <= 8:
         score += 1
     else:
-        issues.append(f"Suboptimal tag count: {len(tags)} (target: 4-8)")
+        issues.append("Suboptimal tag count: {len(tags)} (target: 4-8)")
 
     return score, issues
 ```
 
 **Efficiency (Deep Mode):**
 
-```python
-def score_efficiency_deep(content, sections, code_blocks, metadata):
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+score_efficiency_deep(content, sections, code_blocks, metadata):
     score, issues = score_efficiency_fast(content, sections, code_blocks, metadata)
 
     # Remove balanced sections check (-2) and sentence length check (-2)
     # (already calculated in fast mode, will be replaced)
 
     # Redundancy analysis
-    prose_text = remove_code_blocks(content)
+    prose_text = content with all code blocks removed
     redundancy_pct = calculate_redundancy(prose_text)
+        (see Deep Mode Analysis section for redundancy calculation logic)
 
     if redundancy_pct < 5:
         score += 2  # Replace balanced sections points
     elif redundancy_pct < 10:
         score += 1
-        issues.append(f"Some redundancy detected ({redundancy_pct:.1f}%)")
+        issues.append("Some redundancy detected ({redundancy_pct}%)")
     else:
-        issues.append(f"High redundancy ({redundancy_pct:.1f}%) - consider consolidating similar content")
+        issues.append("High redundancy ({redundancy_pct}%) - consider consolidating similar content")
 
     # Readability (Flesch-Kincaid)
     readability_score = calculate_readability(prose_text)
+        (see Deep Mode Analysis section for Flesch-Kincaid formula)
 
     if readability_score >= 60:  # Easy to read
         score += 2  # Replace sentence length points
     elif readability_score >= 50:
         score += 1
-        issues.append(f"Moderate readability score ({readability_score:.0f}, target: 60+)")
+        issues.append("Moderate readability score ({readability_score}, target: 60+)")
     else:
-        issues.append(f"Low readability score ({readability_score:.0f}, target: 60+) - simplify language")
+        issues.append("Low readability score ({readability_score}, target: 60+) - simplify language")
 
     return score, issues
 ```
@@ -537,75 +547,26 @@ This detailed multi-line format provides comprehensive feedback for the /knowled
 
 ### Parsing Utilities
 
-```python
-def parse_markdown_sections(body: str) -> dict:
-    """Extract sections by ## headers."""
-    sections = {}
-    current_section = None
-    current_lines = []
+**parse_markdown_sections(body):** Iterate through lines of the body. When a line starts with `## `, save the previous section (heading name mapped to its accumulated lines) and start a new section using the text after `## ` as the key. After the loop, save the final section. Returns a dictionary of section names to their content.
 
-    for line in body.split('\n'):
-        if line.startswith('## '):
-            if current_section:
-                sections[current_section] = '\n'.join(current_lines)
-            current_section = line[3:].strip()
-            current_lines = []
-        else:
-            current_lines.append(line)
+**extract_code_blocks(text):** Find all fenced code blocks by matching the regex `` ```(\w+)?\n(.*?)``` `` (with DOTALL flag). For each match, record the language tag (group 1, or empty string if absent) and the code content (group 2). Returns a list of objects with `language` and `code` fields.
 
-    if current_section:
-        sections[current_section] = '\n'.join(current_lines)
+**extract_numbered_rules(text):** Find all lines matching `^\s*\d+\.\s+(.+)$` (multiline) in the given text. Returns the captured rule text for each numbered item.
 
-    return sections
+**extract_headings(text):** Find all lines matching `^(#{1,6})\s+(.+)$` (multiline). For each match, record the heading level (count of `#` characters) and the heading text. Returns a list of objects with `level` and `text` fields.
 
-def extract_code_blocks(text: str) -> list:
-    """Extract all code blocks with metadata."""
-    pattern = r'```(\w+)?\n(.*?)```'
-    blocks = []
-    for match in re.finditer(pattern, text, re.DOTALL):
-        blocks.append({
-            'language': match.group(1) or '',
-            'code': match.group(2)
-        })
-    return blocks
+**count_code_blocks(text):** Count occurrences of `` ``` `` in the text, then divide by 2 (integer division). This gives the number of complete code blocks.
 
-def extract_numbered_rules(text: str) -> list:
-    """Extract numbered list items."""
-    pattern = r'^\s*\d+\.\s+(.+)$'
-    return re.findall(pattern, text, re.MULTILINE)
+**count_table_rows(text):** Count lines containing `|` in the text. Subtract 1 for the header separator row. Return the result, with a minimum of 0.
 
-def extract_headings(text: str) -> list:
-    """Extract all headings with levels."""
-    headings = []
-    for match in re.finditer(r'^(#{1,6})\s+(.+)$', text, re.MULTILINE):
-        headings.append({
-            'level': len(match.group(1)),
-            'text': match.group(2)
-        })
-    return headings
-
-def count_code_blocks(text: str) -> int:
-    """Count code blocks in text."""
-    return len(re.findall(r'```', text)) // 2
-
-def count_table_rows(text: str) -> int:
-    """Count table rows (lines with |)."""
-    lines = [l for l in text.split('\n') if '|' in l]
-    # Subtract header separator
-    return max(0, len(lines) - 1)
-
-def count_table_columns(text: str) -> int:
-    """Count table columns from first row."""
-    for line in text.split('\n'):
-        if '|' in line:
-            return len([c for c in line.split('|') if c.strip()])
-    return 0
-```
+**count_table_columns(text):** Find the first line containing `|`. Split it by `|` and count non-empty, stripped segments. Returns that count, or 0 if no table line is found.
 
 ### Validation Utilities
 
-```python
-def validate_heading_hierarchy(headings: list) -> tuple[bool, list]:
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+validate_heading_hierarchy(headings):
     """Check if heading levels are valid (no skipped levels)."""
     issues = []
     prev_level = 0
@@ -613,66 +574,60 @@ def validate_heading_hierarchy(headings: list) -> tuple[bool, list]:
     for h in headings:
         level = h['level']
         if level > prev_level + 1:
-            issues.append(f"Heading hierarchy skip: h{prev_level} → h{level} ('{h['text']}')")
+            issues.append("Heading hierarchy skip: h{prev_level} -> h{level} ('{h.text}')")
         prev_level = level
 
     return len(issues) == 0, issues
 
-def check_concept_separation(sections: dict) -> bool:
+check_concept_separation(sections):
     """Heuristic: check if sections have distinct topics."""
-    # Extract keywords from each section
-    from collections import Counter
-
     section_keywords = {}
     for name, text in sections.items():
-        words = re.findall(r'\b[a-z]{4,}\b', text.lower())
-        section_keywords[name] = Counter(words).most_common(10)
+        words = find all matches of \b[a-z]{4,}\b in text.lower()
+        section_keywords[name] = top 10 most common words by frequency
 
     # Check for excessive overlap
-    for s1, kw1 in section_keywords.items():
-        for s2, kw2 in section_keywords.items():
-            if s1 >= s2:
-                continue
-            overlap = set(k for k, _ in kw1) & set(k for k, _ in kw2)
-            if len(overlap) > 6:  # >60% overlap
-                return False
+    for each unique pair (s1, s2) of sections:
+        overlap = intersection of top-10 keyword sets
+        if len(overlap) > 6:  # >60% overlap
+            return False
 
     return True
 
-def count_unique_code_patterns(code_blocks: list) -> int:
+count_unique_code_patterns(code_blocks):
     """Estimate unique patterns by clustering similar code."""
-    # Simplified: count distinct first lines
     first_lines = set()
     for block in code_blocks:
-        code = block.get('code', '').strip()
+        code = block.code stripped
         if code:
-            first_line = code.split('\n')[0].strip()
-            # Normalize
-            first_line = re.sub(r'\b\w+\b', 'X', first_line)  # Replace identifiers
-            first_lines.add(first_line)
+            first_line = first line of code, stripped
+            # Normalize: replace all word tokens with 'X' using \b\w+\b
+            first_lines.add(normalized first_line)
 
     return len(first_lines)
 ```
 
 ### Deep Mode Analysis
 
-```python
-def calculate_redundancy(text: str) -> float:
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
+
+```text
+calculate_redundancy(text):
     """Calculate percentage of repeated phrases (3+ words)."""
     # Extract trigrams
     words = text.lower().split()
-    trigrams = [' '.join(words[i:i+3]) for i in range(len(words) - 2)]
+    trigrams = [join words[i] through words[i+2] for i in range(len(words) - 2)]
 
-    from collections import Counter
-    counts = Counter(trigrams)
-    repeated = sum(count - 1 for count in counts.values() if count > 1)
+    counts = frequency count of each trigram
+    repeated = sum(count - 1 for each trigram where count > 1)
 
     return (repeated / len(trigrams) * 100) if trigrams else 0
+    # Redundancy > 20% is flagged in deep mode
 
-def calculate_readability(text: str) -> float:
+calculate_readability(text):
     """Flesch Reading Ease score (0-100, higher = easier)."""
-    sentences = len(re.split(r'[.!?]', text))
-    words = len(text.split())
+    sentences = count of segments split by [.!?]
+    words = count of whitespace-separated tokens
     syllables = estimate_syllables(text)
 
     if sentences == 0 or words == 0:
@@ -681,97 +636,70 @@ def calculate_readability(text: str) -> float:
     score = 206.835 - 1.015 * (words / sentences) - 84.6 * (syllables / words)
     return max(0, min(100, score))
 
-def estimate_syllables(text: str) -> int:
+estimate_syllables(text):
     """Rough syllable count estimation."""
     words = text.lower().split()
     syllables = 0
 
     for word in words:
-        # Count vowel groups
-        syllables += len(re.findall(r'[aeiouy]+', word))
+        # Count vowel groups matching [aeiouy]+
+        syllables += number of vowel group matches in word
 
-    return max(syllables, len(words))  # At least 1 per word
+    return max(syllables, len(words))  # At least 1 syllable per word
 ```
 
 ## Error Handling
 
-```python
-try:
-    # Main evaluation flow
-    content = Read(file_path)
-    # ... evaluation logic
+**Error handling decision tree:**
 
-except FileNotFoundError:
-    return {
-        "status": "error",
-        "message": f"Knowledge entry not found: {file_path}"
-    }
+1. **File not found**: If the **Read** tool returns an error indicating the file does not exist, return: `"Knowledge entry not found: {file_path}"`
+2. **Invalid YAML frontmatter**: If the content between `---` delimiters cannot be parsed as valid YAML (e.g., malformed key-value pairs, incorrect indentation), return: `"Invalid YAML frontmatter: {description of the parsing issue}"`
+3. **Any other failure**: If evaluation cannot be completed for any other reason (missing sections, unreadable content, etc.), return: `"Evaluation failed: {description of the error}"`
 
-except yaml.YAMLError as e:
-    return {
-        "status": "error",
-        "message": f"Invalid YAML frontmatter: {str(e)}"
-    }
-
-except Exception as e:
-    return {
-        "status": "error",
-        "message": f"Evaluation failed: {str(e)}"
-    }
-```
+In all error cases, output the error message as plain text and stop further processing.
 
 ## Implementation
 
 When invoked, this skill:
 
 1. **Parses text input prompt**:
-   ```python
-   # Extract file path from first line
-   lines = prompt.strip().split('\n')
-   file_path = lines[0].replace('Evaluate knowledge entry quality for file:', '').strip()
-
-   # Extract mode from second line (default: fast)
-   mode = 'fast'
-   if len(lines) > 1 and lines[1].startswith('Mode:'):
-       mode = lines[1].replace('Mode:', '').strip()
-   ```
+   Parse the input prompt text to extract `file_path` and `mode`. From the first line, remove the prefix "Evaluate knowledge entry quality for file:" and trim whitespace to get the file path. From the second line (if present), check if it starts with "Mode:" and extract the value (either "fast" or "deep"). Default to "fast" if no mode line is provided.
 
 2. **Reads the knowledge entry**:
-   ```python
-   content = Read(file_path)
-   ```
+   Use **Read** tool to get the knowledge entry content at the extracted `file_path`.
 
 3. **Parses YAML frontmatter and markdown sections** (using helper functions)
 
 4. **Executes scoring algorithms based on mode** (all scoring logic unchanged)
 
 5. **Returns formatted text output** (NOT JSON):
-   ```python
-   # Fast mode: single-line compact format
-   if mode == 'fast':
-       output = f"Quality: {overall_score:.1f}/10 (Clarity: {clarity}, Format: {format}, Structure: {structure}, Completeness: {completeness}, Efficiency: {efficiency})"
-       print(output)
+   If mode is "fast", produce output using the single-line compact template. If mode is "deep", produce output using the multi-line detailed template. Output as plain text (NOT JSON).
 
-   # Deep mode: multi-line detailed format
-   else:
-       output = f"""# Quality Report
+   **Fast mode output template:**
 
-Overall: {overall_score:.1f}/10
+   ```text
+   Quality: {overall_score}/10 (Clarity: {clarity}, Format: {format}, Structure: {structure}, Completeness: {completeness}, Efficiency: {efficiency})
+   ```
 
-Criteria Scores:
-- Clarity (Однозначность): {clarity}/10
-- Format (Формат): {format}/10
-- Structure (Структура): {structure}/10
-- Completeness (Полнота): {completeness}/10
-- Efficiency (Польза/Размер): {efficiency}/10
+   **Deep mode output template:**
 
-Issues:
-{formatted_issues}
+   ```text
+   # Quality Report
 
-Recommendations:
-{formatted_recommendations}
-"""
-       print(output)
+   Overall: {overall_score}/10
+
+   Criteria Scores:
+   - Clarity (Однозначность): {clarity}/10
+   - Format (Формат): {format}/10
+   - Structure (Структура): {structure}/10
+   - Completeness (Полнота): {completeness}/10
+   - Efficiency (Польза/Размер): {efficiency}/10
+
+   Issues:
+   {formatted_issues}
+
+   Recommendations:
+   {formatted_recommendations}
    ```
 
 The skill runs in an isolated context (`context: fork`) to prevent pollution of the main conversation and enable parallel evaluations. Text-based I/O eliminates JSON serialization overhead.

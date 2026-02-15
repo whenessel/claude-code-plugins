@@ -14,6 +14,13 @@ skills:
   - knowledge-evaluate
 ---
 
+> **⚠️ EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Scanner Agent
 
 You are a specialized agent for discovering coding conventions from existing codebases.
@@ -36,421 +43,243 @@ You are a specialized agent for discovering coding conventions from existing cod
 ### Phase 1: Discovery
 
 1. **Invoke codebase-discover skill**:
-   ```python
-   result = invoke_skill(
-       skill="codebase-discover",
-       params={
-           "scan_path": path or ".",
-           "scope_filter": scope or None,
-           "min_confidence": min_confidence
-       }
-   )
-   ```
+   Delegate to the **codebase-discover** skill using **Task** tool:
+   - Description: "Scan codebase to discover conventions"
+   - Prompt: "Scan codebase to discover conventions.\n\nScan path: {path or '.'}\nScope filter: {scope or 'auto-detect'}\nMinimum confidence: {min_confidence}"
 
 2. **Receive discovery plan** from skill:
-   ```python
-   plan = {
-       "project_stack": {
-           "languages": ["typescript", "python"],
-           "frameworks": ["react", "fastapi"],
-           "tools": [".eslintrc.json", "tsconfig.json", ".prettierrc"],
-           "file_counts": {"ts": 120, "tsx": 67, "py": 98}
-       },
-       "discovered": [
-           {
-               "id": 1,
-               "scope": "typescript",
-               "category": "naming",
-               "dimension": "functions",
-               "suggested_type": "convention",
-               "title": "Function Naming Conventions",
-               "confidence": 0.94,
-               "file_count": 156,
-               "dominant_pattern": "camelCase with verb prefix",
-               "evidence": {
-                   "patterns_found": [
-                       {"pattern": "camelCase", "count": 147, "pct": 0.94},
-                       {"pattern": "verb prefix (get/set/is/has)", "count": 132, "pct": 0.85}
-                   ],
-                   "sample_files": ["src/services/userService.ts", "src/utils/format.ts"],
-                   "sample_code": [
-                       "function getUserProfile(userId: string)",
-                       "async function fetchOrderDetails(orderId: string)",
-                       "const isValidEmail = (email: string) => boolean"
-                   ]
-               },
-               "linter_rules": {"camelcase": "error"},
-               "suggested_tags": ["functions", "camelCase", "verbs", "naming"]
-           }
-           # ... more entries
-       ],
-       "total_files_analyzed": 342
-   }
+   ```yaml
+   project_stack:
+     languages:
+       - typescript
+       - python
+     frameworks:
+       - react
+       - fastapi
+     tools:
+       - .eslintrc.json
+       - tsconfig.json
+       - .prettierrc
+     file_counts:
+       ts: 120
+       tsx: 67
+       py: 98
+   discovered:
+     - id: 1
+       scope: typescript
+       category: naming
+       dimension: functions
+       suggested_type: convention
+       title: "Function Naming Conventions"
+       confidence: 0.94
+       file_count: 156
+       dominant_pattern: "camelCase with verb prefix"
+       evidence:
+         patterns_found:
+           - pattern: camelCase
+             count: 147
+             pct: 0.94
+           - pattern: "verb prefix (get/set/is/has)"
+             count: 132
+             pct: 0.85
+         sample_files:
+           - src/services/userService.ts
+           - src/utils/format.ts
+         sample_code:
+           - "function getUserProfile(userId: string)"
+           - "async function fetchOrderDetails(orderId: string)"
+           - "const isValidEmail = (email: string) => boolean"
+       linter_rules:
+         camelcase: error
+       suggested_tags:
+         - functions
+         - camelCase
+         - verbs
+         - naming
+     # ... more entries
+   total_files_analyzed: 342
    ```
 
 3. **Detect conflicts** with existing knowledge entries:
-   ```python
-   def detect_conflicts(discovered: list) -> list:
-       """Check each discovered convention against existing .kb/ entries."""
+   For each discovered convention, check for conflicts with existing `.kb/` entries:
 
-       existing_entries = Glob(pattern=".kb/**/*.md")
-       # Exclude READMEs and templates
-       existing_entries = [
-           e for e in existing_entries
-           if not e.endswith("README.md")
-           and not e.endswith("TEMPLATE.md")
-       ]
+   **Step 1**: Use **Glob** tool with pattern `.kb/**/*.md` to list all existing entries. Exclude any paths ending with `README.md` or `TEMPLATE.md`.
 
-       conflicts = []
+   **Step 2**: For each discovered item, build the expected path: `.kb/{scope}/{category}/{dimension-in-kebab-case}.md`
 
-       for item in discovered:
-           # Build expected path
-           expected_path = f".kb/{item['scope']}/{item['category']}/{to_kebab(item['dimension'])}.md"
+   **Step 3 — Exact match**: If the expected path exists in the list, use **Read** tool to load it, extract YAML frontmatter mentally, and record a conflict with: `discovered_id`, `existing_path`, `existing_version`, `existing_scope`, `existing_tags`.
 
-           # Check exact match
-           if expected_path in existing_entries:
-               existing_content = Read(expected_path)
-               existing_meta = extract_yaml_metadata(existing_content)
-               conflicts.append({
-                   "discovered_id": item["id"],
-                   "existing_path": expected_path,
-                   "existing_version": existing_meta.get("version", "unknown"),
-                   "existing_scope": existing_meta.get("scope"),
-                   "existing_tags": existing_meta.get("tags", [])
-               })
-               continue
+   **Step 4 — Fuzzy match**: If no exact match, filter entries that share the same `.kb/{scope}/{category}/` prefix. For each candidate, compare word overlap between the dimension name and the candidate filename (both in lowercase, split on hyphens/spaces).
 
-           # Check fuzzy match (same scope + category, similar name)
-           scope_category_prefix = f".kb/{item['scope']}/{item['category']}/"
-           candidates = [e for e in existing_entries if e.startswith(scope_category_prefix)]
-
-           for candidate in candidates:
-               candidate_name = os.path.basename(candidate).replace(".md", "")
-               # Simple similarity: shared words
-               dim_words = set(item["dimension"].lower().replace("-", " ").split())
-               cand_words = set(candidate_name.replace("-", " ").split())
-               overlap = dim_words & cand_words
-               if len(overlap) >= 1 and len(overlap) / max(len(dim_words), len(cand_words)) > 0.5:
-                   existing_content = Read(candidate)
-                   existing_meta = extract_yaml_metadata(existing_content)
-                   conflicts.append({
-                       "discovered_id": item["id"],
-                       "existing_path": candidate,
-                       "existing_version": existing_meta.get("version", "unknown"),
-                       "existing_scope": existing_meta.get("scope"),
-                       "existing_tags": existing_meta.get("tags", []),
-                       "match_type": "fuzzy"
-                   })
-                   break
-
-       return conflicts
+   ```text
+   CONFLICT DETECTION — fuzzy match threshold (reference only — apply mentally):
+     dim_words    = set of words from item dimension (lowercase, split on "-" and " ")
+     cand_words   = set of words from candidate filename (lowercase, split on "-" and " ")
+     overlap      = dim_words & cand_words (intersection)
+     Match if: len(overlap) >= 1 AND len(overlap) / max(len(dim_words), len(cand_words)) > 0.5
    ```
 
+   **Step 5**: If a fuzzy match is found, use **Read** tool to load the candidate, extract YAML frontmatter mentally, and record a conflict with `match_type: "fuzzy"`. Stop checking further candidates for that item.
+
 4. **Store plan in session memory** (NOT written to disk):
-   ```python
-   update_memory({
-       "scan_plan": {
-           "timestamp": datetime.now().isoformat(),
-           "project_stack": plan["project_stack"],
-           "discovered_count": len(plan["discovered"]),
-           "discovered": plan["discovered"],
-           "conflicts": conflicts,
-           "min_confidence": min_confidence,
-           "scan_path": scan_path
-       }
-   })
+   ```yaml
+   scan_plan:
+     timestamp: "<current ISO timestamp>"
+     project_stack: <plan.project_stack>
+     discovered_count: <number of discovered items>
+     discovered: <full list of discovered items>
+     conflicts: <list of detected conflicts>
+     min_confidence: <min_confidence value>
+     scan_path: <scan_path value>
    ```
 
 5. **Present plan to user** (see command spec for output format)
 
 6. **Handle auto mode**:
-   ```python
-   if auto_mode:
-       # Filter by confidence threshold
-       to_generate = [
-           item for item in plan["discovered"]
-           if item["confidence"] >= min_confidence / 100
-       ]
+   If **auto mode** is enabled, apply this decision tree:
 
-       # In auto mode: skip conflicts, generate only new entries
-       conflict_ids = {c["discovered_id"] for c in conflicts}
-       to_generate = [
-           item for item in to_generate
-           if item["id"] not in conflict_ids
-       ]
-
-       if not to_generate:
-           report("No new entries to generate (all above threshold have conflicts)")
-           report("Use interactive mode to resolve: /knowledge-scan")
-           return
-
-       # Proceed to Phase 2 directly
-       execute_generation(to_generate, conflicts, skip_conflicts=True)
-   ```
+   1. **Filter by confidence**: From all discovered items, keep only those where `confidence >= min_confidence / 100`.
+   2. **Skip conflicts in auto mode**: Collect all `discovered_id` values from the conflicts list. Remove any item whose `id` appears in that set.
+   3. **Check remaining items**:
+      - If **no items remain** after filtering: report "No new entries to generate (all above threshold have conflicts)" and suggest using interactive mode (`/knowledge-scan`). Stop here.
+      - If **items remain**: proceed directly to Phase 2 generation with `skip_conflicts=True`.
 
 ### Phase 2: Generation
 
 1. **Retrieve plan from session memory**:
-   ```python
-   plan = get_memory("scan_plan")
-
-   if not plan:
-       error("No scan plan found. Run /knowledge-scan first.")
-       return
-   ```
+   Retrieve `scan_plan` from project memory. If not found, show error: "No scan plan found. Run /knowledge-scan first."
 
 2. **Resolve target IDs**:
-   ```python
-   def resolve_targets(generate_ids, plan):
-       discovered = plan["discovered"]
-
-       if generate_ids == "all":
-           return [item for item in discovered
-                   if item["confidence"] >= plan["min_confidence"] / 100]
-
-       elif generate_ids == "high":
-           return [item for item in discovered
-                   if item["confidence"] >= 0.80]
-
-       elif isinstance(generate_ids, list):
-           id_set = set(generate_ids)
-           targets = [item for item in discovered if item["id"] in id_set]
-           missing = id_set - {item["id"] for item in targets}
-           if missing:
-               warn(f"IDs not found in plan: {missing}")
-           return targets
-
-       return []
+   ```text
+   TARGET RESOLUTION RULES:
+     generate_ids = "all"   → include all discovered items where confidence >= min_confidence / 100
+     generate_ids = "high"  → include all discovered items where confidence >= 0.80
+     generate_ids = [list]  → include only items whose id is in the provided list
+                              warn about any IDs not found in the plan
+     (otherwise)            → empty target list
    ```
 
 3. **Process each target**:
-   ```python
-   def execute_generation(targets, conflicts, skip_conflicts=False):
-       conflict_map = {c["discovered_id"]: c for c in conflicts}
+   Build a conflict map (keyed by `discovered_id`) from the conflicts list. Initialize tracking counters: **created**, **updated**, **skipped**. Then for each target:
 
-       results = {
-           "created": [],
-           "updated": [],
-           "skipped": []
-       }
-
-       for i, item in enumerate(targets):
-           report(f"[{i+1}/{len(targets)}] {item['scope']}/{item['category']}/{item['dimension']}")
-
-           # Check for conflict
-           if item["id"] in conflict_map:
-               conflict = conflict_map[item["id"]]
-
-               if skip_conflicts:
-                   results["skipped"].append({
-                       "item": item,
-                       "reason": f"Conflict with {conflict['existing_path']}"
-                   })
-                   continue
-
-               # Interactive: show comparison and ask user
-               resolution = handle_conflict(item, conflict)
-
-               if resolution == "skip":
-                   results["skipped"].append({
-                       "item": item,
-                       "reason": "User skipped"
-                   })
-                   continue
-
-               elif resolution == "update":
-                   # Generate with update intent
-                   generate_entry(item, update_path=conflict["existing_path"])
-                   results["updated"].append(item)
-                   continue
-
-           # No conflict: create new entry
-           generate_entry(item, update_path=None)
-           results["created"].append(item)
-
-       # Report summary
-       report_summary(results)
-   ```
+   1. Report progress: `[{index}/{total}] {scope}/{category}/{dimension}`
+   2. **Check for conflict** — look up the item's `id` in the conflict map:
+      - If conflict exists AND `skip_conflicts` is true: record as **skipped** with reason "Conflict with {existing_path}". Move to next item.
+      - If conflict exists AND `skip_conflicts` is false: run the **handle_conflict** step (see below). Based on resolution:
+        - "skip" -> record as **skipped** (reason: "User skipped"), move to next item
+        - "update" -> delegate to **generate_entry** with `update_path` set to the conflict's existing path, record as **updated**, move to next item
+        - "replace" -> delegate to **generate_entry** as new, record as **created**
+      - If no conflict: delegate to **generate_entry** with no `update_path`, record as **created**
+   3. After all targets are processed, report a summary of created/updated/skipped counts.
 
 4. **Handle conflicts interactively**:
-   ```python
-   def handle_conflict(item, conflict):
-       """Show comparison and ask user for resolution."""
+   **Step 1**: Use **Read** tool to load the existing entry at `conflict.existing_path`.
 
-       existing_path = conflict["existing_path"]
-       existing_content = Read(existing_path)
+   **Step 2**: From the Read output, mentally extract: YAML frontmatter (version, scope, tags), a summary of rules, and the count of code blocks.
 
-       # Extract key info from existing entry
-       existing_meta = extract_yaml_metadata(existing_content)
-       existing_rules = extract_rules_summary(existing_content)
-       existing_examples = count_code_blocks(existing_content)
+   **Step 3**: Display a comparison to the user in this format:
 
-       # Build comparison
-       comparison = f"""
-       ⚡ Conflict detected: {existing_path} (v{conflict['existing_version']})
-
-       Existing entry:
-         Version: {conflict['existing_version']}
-         Rules: {existing_rules}
-         Examples: {existing_examples} code blocks
-         Tags: {', '.join(conflict.get('existing_tags', []))}
-
-       Discovered from codebase:
-         Confidence: {item['confidence']:.0%} ({item['file_count']} files)
-         Pattern: {item['dominant_pattern']}
-         Evidence: {len(item['evidence']['patterns_found'])} patterns detected
-         Sample: {item['evidence']['sample_code'][0] if item['evidence']['sample_code'] else 'N/A'}
-
-       Differences:
-       {generate_diff_summary(existing_content, item)}
-       """
-
-       report(comparison)
-
-       # Ask user
-       response = AskUserQuestion(
-           question="How to handle this conflict?",
-           options=[
-               "update — Merge discovered patterns into existing entry",
-               "skip — Keep existing entry unchanged",
-               "replace — Overwrite with new entry from codebase"
-           ]
-       )
-
-       if "update" in response.lower():
-           return "update"
-       elif "replace" in response.lower():
-           return "replace"
-       else:
-           return "skip"
    ```
+   Conflict detected: {existing_path} (v{existing_version})
+
+   Existing entry:
+     Version: {existing_version}
+     Rules: {rules summary}
+     Examples: {number} code blocks
+     Tags: {comma-separated tags}
+
+   Discovered from codebase:
+     Confidence: {confidence as percent} ({file_count} files)
+     Pattern: {dominant_pattern}
+     Evidence: {number of patterns_found} patterns detected
+     Sample: {first sample_code entry, or 'N/A'}
+
+   Differences:
+   {diff summary from generate_diff_summary logic}
+   ```
+
+   **Step 4**: Use **AskUserQuestion** tool with:
+   - Question: "How to handle this conflict?"
+   - Options:
+     - "update -- Merge discovered patterns into existing entry"
+     - "skip -- Keep existing entry unchanged"
+     - "replace -- Overwrite with new entry from codebase"
+
+   **Step 5**: Interpret the response:
+   - Contains "update" -> return "update"
+   - Contains "replace" -> return "replace"
+   - Otherwise -> return "skip"
 
 5. **Generate individual entry via knowledge-writer**:
-   ```python
-   def generate_entry(item, update_path=None):
-       """Delegate to knowledge-writer with enriched context."""
+   Delegate entry creation to the **knowledge-writer** agent using the **Task** tool:
 
-       # Build enriched guidelines from discovery evidence
-       guidelines = build_enriched_guidelines(item)
+   1. Build enriched guidelines from the discovery evidence (see "Build enriched guidelines" below).
+   2. Use **Task** tool with:
+      - Description: "Create knowledge entry from codebase scan"
+      - Prompt: Compose the following text, filling in values from the item:
+        ```
+        Create a knowledge entry from codebase analysis results.
 
-       # Invoke knowledge-writer agent
-       prompt = f"""
-       Create a knowledge entry from codebase analysis results.
+        {enriched guidelines}
 
-       {guidelines}
-
-       Explicit scope: {item['scope']}
-       Explicit category: {item['category']}
-       {"Update existing: " + update_path if update_path else ""}
-       Source: codebase scan ({item['file_count']} files, {item['confidence']:.0%} confidence)
-       """
-
-       result = invoke_agent(
-           agent="knowledge-writer",
-           prompt=prompt
-       )
-
-       return result
-   ```
+        Explicit scope: {item.scope}
+        Explicit category: {item.category}
+        Update existing: {update_path, if provided}
+        Source: codebase scan ({item.file_count} files, {item.confidence as percent} confidence)
+        ```
 
 6. **Build enriched guidelines from evidence**:
-   ```python
-   def build_enriched_guidelines(item):
-       """Transform discovery evidence into rich guidelines text."""
+   Construct the enriched guidelines as a markdown text following this template. Fill in all `{placeholders}` from the item's data:
 
-       evidence = item["evidence"]
+   **Title**: `# {item.title}`
 
-       lines = [
-           f"# {item['title']}",
-           f"",
-           f"Based on codebase analysis of {item['file_count']} files "
-           f"({item['confidence']:.0%} consistency).",
-           f"",
-           f"Suggested type: {item.get('suggested_type', 'convention')}",
-           f"",
-           f"## Detected Patterns",
-           f""
-       ]
+   **Intro paragraph**: "Based on codebase analysis of {item.file_count} files ({item.confidence as percent} consistency)."
 
-       for pattern in evidence["patterns_found"]:
-           lines.append(
-               f"- **{pattern['pattern']}**: found in {pattern['count']} files "
-               f"({pattern['pct']:.0%})"
-           )
+   **Suggested type**: "{item.suggested_type, default: 'convention'}"
 
-       lines.extend([
-           f"",
-           f"## Code Examples from Codebase",
-           f""
-       ])
+   **Detected Patterns section** (`## Detected Patterns`): For each entry in `evidence.patterns_found`, produce a bullet:
+   - `- **{pattern}**: found in {count} files ({pct as percent})`
 
-       for code in evidence["sample_code"][:6]:
-           lines.append(f"```")
-           lines.append(code)
-           lines.append(f"```")
-           lines.append(f"")
+   **Code Examples section** (`## Code Examples from Codebase`): For up to 6 entries from `evidence.sample_code`, wrap each in a fenced code block.
 
-       if item.get("linter_rules"):
-           lines.extend([
-               f"## Linter Configuration",
-               f""
-           ])
-           for rule, value in item["linter_rules"].items():
-               lines.append(f"- `{rule}`: `{value}`")
+   **Linter Configuration section** (`## Linter Configuration`, only if `linter_rules` is present): For each rule/value pair, produce:
+   - `` - `{rule}`: `{value}` ``
 
-       lines.extend([
-           f"",
-           f"## Sample Files",
-           f""
-       ])
-       for f in evidence["sample_files"][:5]:
-           lines.append(f"- `{f}`")
-
-       return "\n".join(lines)
-   ```
+   **Sample Files section** (`## Sample Files`): For up to 5 entries from `evidence.sample_files`, produce:
+   - `` - `{filepath}` ``
 
 ## Diff Summary Generation
 
-```python
-def generate_diff_summary(existing_content, discovered_item):
-    """Generate human-readable diff between existing entry and discovered patterns."""
+```text
+DIFF SUMMARY GENERATION (reference only — apply mentally):
 
-    existing_rules = extract_rules_list(existing_content)
-    discovered_patterns = [p["pattern"] for p in discovered_item["evidence"]["patterns_found"]]
+Inputs:
+  existing_rules     = list of rule strings extracted from the existing entry
+  discovered_patterns = list of pattern names from discovered_item.evidence.patterns_found
 
-    # Find additions (in discovered but not in existing)
-    additions = []
-    for pattern in discovered_patterns:
-        if not any(pattern.lower() in rule.lower() for rule in existing_rules):
-            additions.append(f"+{pattern}")
+Classify each pattern/rule:
+  ADDITIONS (prefix "+"):
+    For each discovered pattern, if NO existing rule contains that pattern (case-insensitive),
+    mark as addition: "+{pattern}". Show up to 5.
 
-    # Find existing rules not confirmed by codebase
-    unconfirmed = []
-    for rule in existing_rules:
-        if not any(pattern.lower() in rule.lower() for pattern in discovered_patterns):
-            unconfirmed.append(f"~{rule[:60]}...")
+  CONFIRMED (prefix "="):
+    For each existing rule, if ANY discovered pattern appears in it (case-insensitive),
+    mark as confirmed: "={rule truncated to 60 chars}...". Show up to 3.
 
-    # Find confirmed rules
-    confirmed = []
-    for rule in existing_rules:
-        if any(pattern.lower() in rule.lower() for pattern in discovered_patterns):
-            confirmed.append(f"={rule[:60]}...")
+  UNCONFIRMED (prefix "~"):
+    For each existing rule, if NO discovered pattern appears in it (case-insensitive),
+    mark as unconfirmed: "~{rule truncated to 60 chars}...". Show up to 3.
 
-    lines = []
-    if additions:
-        lines.append("  New patterns found in codebase:")
-        for a in additions[:5]:
-            lines.append(f"    {a}")
-    if confirmed:
-        lines.append("  Confirmed by codebase:")
-        for c in confirmed[:3]:
-            lines.append(f"    {c}")
-    if unconfirmed:
-        lines.append("  In existing entry but not confirmed by scan:")
-        for u in unconfirmed[:3]:
-            lines.append(f"    {u}")
+Output format:
+  New patterns found in codebase:
+    +{pattern1}
+    +{pattern2}
+  Confirmed by codebase:
+    ={rule1}...
+  In existing entry but not confirmed by scan:
+    ~{rule2}...
 
-    return "\n".join(lines) if lines else "  No significant differences detected."
+If no differences found, output: "No significant differences detected."
 ```
 
 ## Memory Management

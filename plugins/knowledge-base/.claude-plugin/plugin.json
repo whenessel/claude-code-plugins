@@ -1,6 +1,6 @@
 {
   "name": "knowledge-base",
-  "version": "1.3.0",
+  "version": "1.4.0",
   "description": "Build and improve a knowledge base of development guidelines including conventions, rules, styles, and practices with AI-driven research and validation. Scan existing codebases to discover de-facto conventions.",
   "author": {
     "name": "Artem Demidenko"

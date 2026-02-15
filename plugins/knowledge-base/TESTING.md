@@ -1,258 +1,282 @@
-# Conventions Plugin Testing Guide
+# Knowledge Base Plugin — Testing Guide
 
-This document provides comprehensive test cases to validate the Conventions Plugin functionality.
+Comprehensive test cases for the knowledge-base plugin v1.4.0.
 
 ## Test Environment
 
-- **Plugin Location**: `.claude/plugins/conventions/`
-- **Test Conventions**: `.conventions/`
+- **Plugin Location**: `plugins/knowledge-base/` (or installed via `.claude/plugins/knowledge-base/`)
+- **Knowledge Base Directory**: `.kb/`
 - **Claude Code Version**: Latest
+- **Plugin Version**: 1.4.0
+
+## How to Run
+
+Launch Claude Code with the plugin:
+
+```bash
+claude --plugin-dir ./plugins/knowledge-base
+```
+
+Or copy to `.claude/plugins/` for testing in a specific project context.
 
 ## Pre-Test Checklist
 
-- [ ] Plugin installed in `.claude/plugins/conventions/`
-- [ ] All 9 plugin files present (run `tree .claude/plugins/conventions`)
-- [ ] `.conventions/` directory exists (created during testing)
+- [ ] Plugin installed and accessible
+- [ ] All plugin files present:
+  - [ ] `.claude-plugin/plugin.json` (version 1.4.0)
+  - [ ] 4 commands: `knowledge-add.md`, `knowledge-reindex.md`, `knowledge-report.md`, `knowledge-scan.md`
+  - [ ] 3 agents: `knowledge-writer.md`, `knowledge-evaluator.md`, `knowledge-scanner.md`
+  - [ ] 4 skills: `knowledge-draft/`, `knowledge-evaluate/`, `codebase-discover/`, `knowledge-review/`
+  - [ ] `hooks/hooks.json`
 - [ ] Claude Code CLI is running
 
-## Test Cases
+---
 
-### Test 1: Simple Convention (Direct Input)
+## Critical: Python Script Prevention Tests
 
-**Objective**: Verify basic convention creation with minimal input
+> These tests verify the core fix in v1.4.0 — the plugin must **NEVER** create or execute Python scripts.
+
+### Test P1: No Python Scripts During Entry Creation
 
 **Command**:
 ```bash
-/convention TypeScript files should not exceed 800 lines
+/knowledge-add TypeScript functions: camelCase, verb-based, max 3 words
+```
+
+**Watch for**:
+- [ ] No `.py` files created anywhere (check `/tmp`, working directory)
+- [ ] No `python` or `python3` commands in Bash tool calls
+- [ ] No `import json`, `import yaml`, `import os` in any generated content
+- [ ] All YAML/JSON parsing done "mentally" by Claude (via Read tool output)
+- [ ] Entry created successfully in `.kb/`
+
+**Post-test verification**:
+```bash
+# Check no .py files were created in the last 5 minutes
+find /tmp -name "*.py" -mmin -5 2>/dev/null
+find . -name "*.py" -mmin -5 -not -path "./node_modules/*" 2>/dev/null
+```
+
+### Test P2: No Python Scripts During Codebase Scan
+
+**Command**:
+```bash
+/knowledge-scan
+```
+
+**Watch for**:
+- [ ] Discovery phase uses Grep/Glob/Read tools (not Python)
+- [ ] No `python` Bash commands
+- [ ] Stack detection works via Glob (config files) and Read (parsing mentally)
+- [ ] Pattern analysis uses Grep tool with regex patterns
+
+### Test P3: No Python Scripts During Quality Evaluation
+
+**Command**:
+```bash
+/knowledge-report
+```
+
+**Watch for**:
+- [ ] Scoring algorithms applied "mentally" (not via Python execution)
+- [ ] Flesch-Kincaid formula applied without Python scripts
+- [ ] Quality report returned in expected format
+
+### Test P4: Execution Constraint Block Presence
+
+**Verification** (run outside Claude Code):
+```bash
+# All 11 files must contain the constraint block
+for file in \
+  plugins/knowledge-base/skills/knowledge-draft/SKILL.md \
+  plugins/knowledge-base/skills/knowledge-evaluate/SKILL.md \
+  plugins/knowledge-base/skills/codebase-discover/SKILL.md \
+  plugins/knowledge-base/skills/knowledge-review/SKILL.md \
+  plugins/knowledge-base/agents/knowledge-scanner.md \
+  plugins/knowledge-base/agents/knowledge-evaluator.md \
+  plugins/knowledge-base/agents/knowledge-writer.md \
+  plugins/knowledge-base/commands/knowledge-add.md \
+  plugins/knowledge-base/commands/knowledge-reindex.md \
+  plugins/knowledge-base/commands/knowledge-scan.md \
+  plugins/knowledge-base/commands/knowledge-report.md; do
+  if grep -q "EXECUTION CONSTRAINT" "$file"; then
+    echo "OK: $file"
+  else
+    echo "MISSING: $file"
+  fi
+done
+
+# No python code blocks should remain
+grep -rn '```python' plugins/knowledge-base/ --include="*.md"
+# Expected: 0 results
+
+# No Python imports should remain
+grep -rn 'import os\|import json\|import yaml\|import re' plugins/knowledge-base/ --include="*.md"
+# Expected: 0 results
+```
+
+---
+
+## Functional Tests
+
+### Test 1: Create Entry from Text (Basic)
+
+**Objective**: Verify basic knowledge entry creation with minimal input
+
+**Command**:
+```bash
+/knowledge-add TypeScript files should not exceed 800 lines
 ```
 
 **Expected Behavior**:
-1. Convention-writer agent activates
-2. Draft-convention skill processes input
-3. Detects tier: `simple` (20-50 lines)
-4. Auto-generates path: `.conventions/typescript/rules/file-size.md`
-5. Creates directory structure if needed
-6. Writes convention file
-7. Validates YAML and structure
+1. `knowledge-writer` agent activates
+2. `knowledge-draft` skill processes input
+3. Detects scope: `typescript`, category: `rules`
+4. Creates file at `.kb/typescript/rules/file-size.md` (or similar)
+5. YAML frontmatter includes: `type`, `version: 1.0`, `scope`, `category`, `tags`
+6. Quality evaluation runs (non-blocking)
 
 **Expected Output**:
 ```
-✓ Convention file created: .conventions/typescript/rules/file-size.md
-
-Tier: simple
-Lines: ~40
-Sections: 3
+✓ Knowledge entry created: .kb/typescript/rules/file-size.md
+Version: 1.0
+Quality: X.X/10 (Clarity: N, Format: N, Structure: N, Completeness: N, Efficiency: N)
 ```
 
 **Validation**:
 - [ ] File exists at expected path
-- [ ] YAML front matter is valid
-- [ ] Contains: Title, Description, Format, Allowed sections
-- [ ] Line count is 20-50
-
-**Check File**:
-```bash
-cat .conventions/typescript/rules/file-size.md
-```
+- [ ] YAML front matter is valid (starts with `---`, ends with `---`)
+- [ ] Required fields present: type, version, scope, category, tags
+- [ ] Type is one of: convention, rule, pattern, guide, documentation, reference, style, environment
+- [ ] Content is comprehensive tier (150-300 lines)
+- [ ] No Python scripts created
 
 ---
 
-### Test 2: Standard Convention (Multiple Rules)
+### Test 2: Create Entry with Multiple Rules
 
-**Objective**: Verify standard-tier convention with multiple related rules
+**Objective**: Verify comprehensive entry creation with rich input
 
 **Command**:
 ```bash
-/convention TypeScript functions: camelCase, verb-based, descriptive, max 3 words, boolean functions start with is/has/should
+/knowledge-add TypeScript functions: camelCase, verb-based, descriptive, max 3 words, boolean functions start with is/has/should
 ```
 
 **Expected Behavior**:
-1. Agent detects 5 rules mentioned
-2. Tier detection: `standard` (50-150 lines)
-3. Creates comprehensive structure with Allowed/Forbidden/Rules sections
-4. Auto-generates examples based on rules
-5. Path: `.conventions/typescript/naming/functions.md`
-
-**Expected Output**:
-```
-✓ Convention file created: .conventions/typescript/naming/functions.md
-
-Tier: standard
-Lines: ~95
-Sections: 6
-Examples: 6
-```
+1. Detects scope: `typescript`, category: `naming`
+2. Generates comprehensive content with multiple sections
+3. Path: `.kb/typescript/naming/functions.md` (or similar)
+4. Includes Format section, Allowed/Forbidden examples, Rules
 
 **Validation**:
+- [ ] Contains Format section with bullet points
 - [ ] Contains Allowed section with good examples
 - [ ] Contains Forbidden section with anti-patterns
-- [ ] Rules section with numbered guidelines
-- [ ] Line count is 50-150
+- [ ] Rules section with guidelines
 - [ ] Code blocks have `typescript` language tags
-
-**Check File**:
-```bash
-cat .conventions/typescript/naming/functions.md
-head -50 .conventions/typescript/naming/functions.md
-```
+- [ ] Quality score provided
 
 ---
 
-### Test 3: Interactive Mode
+### Test 3: Create Entry with Explicit Parameters
 
-**Objective**: Verify interactive prompts and user input collection
+**Objective**: Verify explicit type/scope/category override auto-detection
 
 **Command**:
 ```bash
-/convention interactive
-```
-
-**Expected Prompts**:
-```
-1. Topic: Error Handling
-2. Scope: TypeScript
-3. Category: patterns
-4. Guidelines (multiline):
-   > try-catch blocks around async operations
-   > custom Error classes extending Error
-   > log errors with context
-   > user-friendly error messages
-   >
-5. Tags: error, exceptions, async, logging
+/knowledge-add type:rule scope:react category:patterns Always use ErrorBoundary components around route-level components
 ```
 
 **Expected Behavior**:
-1. AskUserQuestion prompts appear sequentially
-2. Collects all inputs
-3. Constructs structured guidelines
-4. Detects tier: `comprehensive` (7+ related concepts)
-5. Creates detailed convention with subsections
+1. Parses `type:rule`, `scope:react`, `category:patterns`
+2. Uses explicit values (confidence=1.0, no ambiguity questions)
+3. Creates at `.kb/react/patterns/error-boundary.md` (or similar)
+
+**Validation**:
+- [ ] YAML `type: rule`
+- [ ] YAML `scope: react`
+- [ ] YAML `category: patterns`
+- [ ] No AskUserQuestion prompts for type/scope/category
+
+---
+
+### Test 4: Create Entry from URL
+
+**Objective**: Verify URL source detection and content fetching
+
+**Command**:
+```bash
+/knowledge-add https://example.com/style-guide.md scope:typescript
+```
+
+**Expected Behavior**:
+1. Detects URL pattern (`https?://`)
+2. Fetches content via WebFetch
+3. Processes fetched content as guidelines
+4. Creates knowledge entry
+
+**Validation**:
+- [ ] URL correctly detected as source
+- [ ] Content fetched and used
+- [ ] Entry created with fetched content as base
+
+---
+
+### Test 5: Create Entry from Local File
+
+**Objective**: Verify local file source detection
+
+**Command**:
+```bash
+/knowledge-add ./docs/guidelines.md scope:typescript
+```
+
+**Expected Behavior**:
+1. Detects file path (ends with `.md`)
+2. Reads file content via Read tool
+3. Processes file content as guidelines
+4. Security check: rejects paths with `..`
+
+**Validation**:
+- [ ] File content correctly read
+- [ ] Entry created from file content
+- [ ] Path with `..` is rejected with error
+
+---
+
+### Test 6: Batch Processing from Directory
+
+**Objective**: Verify batch processing of multiple files
+
+**Command**:
+```bash
+/knowledge-add ./docs/guidelines/ scope:typescript
+```
+
+**Expected Behavior**:
+1. Detects directory source
+2. Globs `**/*.md` in directory
+3. Excludes `README.md` and hidden files
+4. Processes each file independently
+5. Shows aggregate results
 
 **Expected Output**:
 ```
-✓ Convention file created: .conventions/typescript/patterns/error-handling.md
+✓ Batch processing complete
 
-Tier: comprehensive
-Lines: ~220
-Sections: 10
-Examples: 8
+Success: N files
+  - ./docs/file1.md → .kb/typescript/.../entry1.md (v1.0)
+  ...
+
+Skipped: N files (if any ambiguous)
+Failed: N files (if any errors)
 ```
 
 **Validation**:
-- [ ] All user inputs are reflected in the file
-- [ ] Comprehensive structure with subsections
-- [ ] Summary table included
-- [ ] Multiple domain sections
-- [ ] Line count is 150-300
-
----
-
-### Test 4: Custom Path
-
-**Objective**: Verify --path argument overrides auto-generated path
-
-**Command**:
-```bash
-/convention --path .conventions/custom/my-rules.md React hooks: start with use, camelCase, descriptive
-```
-
-**Expected Behavior**:
-1. Parses --path argument
-2. Validates path (must end with .md, no ..)
-3. Uses custom path instead of auto-generated
-4. Creates directory structure if needed
-
-**Expected Output**:
-```
-✓ Convention file created: .conventions/custom/my-rules.md
-
-Tier: standard
-Custom path used
-```
-
-**Validation**:
-- [ ] File created at `.conventions/custom/my-rules.md`
-- [ ] Not created at default path (react/naming/hooks.md)
-- [ ] YAML front matter still correct
-- [ ] Scope is `react` (from input)
-
-**Check**:
-```bash
-ls -la .conventions/custom/
-cat .conventions/custom/my-rules.md
-```
-
----
-
-### Test 5: File Conflict Handling
-
-**Objective**: Verify behavior when convention file already exists
-
-**Setup**:
-```bash
-# First, create a convention
-/convention TypeScript variables should use camelCase
-```
-
-**Command** (same topic):
-```bash
-/convention TypeScript variables: camelCase, descriptive, const for constants
-```
-
-**Expected Behavior**:
-1. Detects file exists: `.conventions/typescript/naming/variables.md`
-2. Returns conflict status
-3. Agent prompts user for action
-
-**Expected Prompt**:
-```
-⚠ File already exists: .conventions/typescript/naming/variables.md
-
-Options:
-1. Overwrite existing file
-2. Rename new file (variables-v2.md)
-3. Merge with existing content
-
-What would you like to do? [1/2/3]
-```
-
-**Test Each Option**:
-- [ ] **Option 1 (Overwrite)**: Replaces file with new content
-- [ ] **Option 2 (Rename)**: Creates variables-v2.md
-- [ ] **Option 3 (Merge)**: Combines rules from both (future enhancement)
-
----
-
-### Test 6: Insufficient Input
-
-**Objective**: Verify handling when user input is too vague
-
-**Command**:
-```bash
-/convention error handling
-```
-
-**Expected Behavior**:
-1. Skill detects <2 specific rules
-2. Returns `insufficient_input` status
-3. Agent asks clarifying questions
-
-**Expected Output**:
-```
-⚠ Need more information to create convention
-
-The following questions need answers:
-- What specific rules should this convention enforce?
-- Can you provide an example of correct usage?
-- What problem does this convention solve?
-
-Would you like me to research best practices for this topic?
-```
-
-**User Response Options**:
-- Provide more details
-- Request research: "Yes, research best practices"
-- Cancel and try interactive mode
+- [ ] README.md excluded from processing
+- [ ] Hidden files excluded
+- [ ] Per-file success/failure tracking
+- [ ] Batch continues on individual file failure
 
 ---
 
@@ -262,325 +286,377 @@ Would you like me to research best practices for this topic?
 
 **Command**:
 ```bash
-/convention Правила обработки ошибок: try-catch блоки, логирование, пользовательские классы ошибок
+/knowledge-add Правила обработки ошибок в TypeScript: try-catch блоки, логирование, пользовательские классы ошибок
 ```
 
 **Expected Behavior**:
 1. Detects Cyrillic characters
-2. Sets input_language: russian
-3. Processes correctly
-4. Output is in English
-
-**Expected Output**:
-```
-✓ Convention file created: .conventions/typescript/patterns/error-handling.md
-
-Language: Russian detected, output in English
-Tier: standard
-```
+2. Processes correctly
+3. Output convention is in English
+4. Scope correctly detected as `typescript`
 
 **Validation**:
-- [ ] Convention content is in English
-- [ ] Rules correctly translated/interpreted
-- [ ] Metadata accurate
-- [ ] Agent memory stores language preference
-
-**Check**:
-```bash
-cat .conventions/typescript/patterns/error-handling.md | head -30
-# Verify content is in English
-```
+- [ ] Entry content is in English
+- [ ] Rules correctly interpreted from Russian
+- [ ] YAML metadata accurate
 
 ---
 
-### Test 8: Rebuild Index
+### Test 8: Ambiguous Scope Detection
 
-**Objective**: Verify index generation from existing conventions
-
-**Setup**:
-```bash
-# Create 2-3 test conventions first
-/convention TypeScript functions: camelCase, verb-based
-/convention TypeScript files: max 800 lines
-/convention Python modules: snake_case, lowercase
-```
+**Objective**: Verify AskUserQuestion triggers when scope is ambiguous
 
 **Command**:
 ```bash
-/rebuild-index
+/knowledge-add Error handling best practices
 ```
 
 **Expected Behavior**:
-1. Scans `.conventions/**/*.md`
-2. Excludes README.md, TEMPLATE.md
-3. Extracts YAML front matter and titles
-4. Groups by scope → category
-5. Generates README.md with:
-   - Directory structure
-   - Grouped listings
-   - Statistics
-   - Last updated date
+1. Scope confidence < 0.7 (could be typescript, python, or general)
+2. AskUserQuestion prompts user to choose scope
+3. After user selects, entry is created
+
+**Validation**:
+- [ ] AskUserQuestion prompt appears
+- [ ] Options include relevant scopes
+- [ ] After selection, correct scope used
+
+---
+
+### Test 9: Update Existing Entry (Minor)
+
+**Objective**: Verify minor update without confirmation
+
+**Setup**: First create an entry:
+```bash
+/knowledge-add TypeScript functions should use camelCase
+```
+
+**Command** (add rule to same topic):
+```bash
+/knowledge-add Add rule: TypeScript functions should document thrown errors
+```
+
+**Expected Behavior**:
+1. Detects existing file at same path
+2. Intent: `append_rules` (minor update)
+3. No confirmation needed
+4. Version increments: 1.0 → 1.1
+
+**Validation**:
+- [ ] File updated (not replaced)
+- [ ] Version incremented to 1.1
+- [ ] New rule added to Rules section
+- [ ] Existing content preserved
+
+---
+
+### Test 10: Update Existing Entry (Major — Requires Confirmation)
+
+**Command**:
+```bash
+/knowledge-add Completely rewrite TypeScript function naming conventions
+```
+
+**Expected Behavior**:
+1. Detects existing file
+2. Intent: `full_overwrite` (major update)
+3. AskUserQuestion for confirmation
+4. If confirmed, version increments: 1.x → 2.0
+
+**Validation**:
+- [ ] Confirmation prompt appears
+- [ ] If confirmed: file overwritten, version = 2.0
+- [ ] If rejected: file unchanged
+
+---
+
+### Test 11: Rebuild Index
+
+**Objective**: Verify index generation from existing entries
+
+**Setup**: Create 2-3 test entries first (Tests 1-3)
+
+**Command**:
+```bash
+/knowledge-reindex
+```
+
+**Expected Behavior**:
+1. Scans `.kb/**/*.md` (excludes README.md, TEMPLATE.md)
+2. Extracts YAML frontmatter from each file
+3. Groups by scope → category
+4. Generates hierarchy of README files:
+   - `.kb/README.md` (root summary)
+   - `.kb/{scope}/README.md` (scope details)
+   - `.kb/{scope}/{category}/README.md` (category details)
 
 **Expected Output**:
 ```
-Scanning conventions directory...
-Found 3 convention files
+Scanning knowledge entries directory...
+Found N knowledge entries
 
 Organizing by scope and category...
-- typescript: 2 conventions
-- python: 1 convention
+- typescript: N entries (naming: X, rules: Y)
 
-✓ Index rebuilt: .conventions/README.md
+Generating category READMEs...
+✓ .kb/typescript/naming/README.md (X entries)
+...
+
+Generating scope READMEs...
+✓ .kb/typescript/README.md (N entries)
+
+Generating root README...
+✓ .kb/README.md (summary with links)
 
 Summary:
-- Total conventions: 3
-- Scopes: 2
-- Categories: 2
+- Total knowledge entries: N
+- Scopes: X
+- Categories: Y
+- README files generated: Z
 ```
 
 **Validation**:
-- [ ] `.conventions/README.md` exists
-- [ ] Contains all 3 conventions
-- [ ] Grouped by scope (typescript, python)
-- [ ] Within scope, grouped by category
-- [ ] Version numbers displayed
-- [ ] Tags listed
+- [ ] `.kb/README.md` exists and contains summary
+- [ ] Scope READMEs exist
+- [ ] Category READMEs exist
+- [ ] All entries listed
+- [ ] Navigation links work (relative paths)
 - [ ] Statistics accurate
-- [ ] Relative paths correct
-
-**Check**:
-```bash
-cat .conventions/README.md
-```
+- [ ] Scopes sorted alphabetically (`general` last)
 
 ---
 
-### Test 9: PostToolUse Hook
-
-**Objective**: Verify automatic notification after convention file changes
+### Test 12: Rebuild Index with Review
 
 **Command**:
 ```bash
-/convention TypeScript async functions: use try-catch, await properly
+/knowledge-reindex --review
 ```
 
 **Expected Behavior**:
-1. Convention file created successfully
-2. PostToolUse hook triggers
-3. Echo notification displayed
+1. Standard reindex (same as Test 11)
+2. Additionally runs Level 1 validation on all entries
+3. Reports structural issues found
 
-**Expected Notification**:
+**Validation**:
+- [ ] Index rebuilt normally
+- [ ] Validation report appended
+- [ ] Issues listed (if any)
+- [ ] No auto-fixes applied (report-only mode)
+
+---
+
+### Test 13: Quality Report
+
+**Objective**: Verify deep quality evaluation
+
+**Command**:
+```bash
+/knowledge-report
 ```
-✓ Convention file updated. Run /rebuild-index to update catalog.
+
+**Expected Behavior**:
+1. Finds most recently modified entry (Glob sorted by mtime)
+2. Delegates to `knowledge-evaluator` agent
+3. Agent invokes `knowledge-evaluate` skill in deep mode
+4. Returns detailed report
+
+**Expected Output Format**:
+```
+# Knowledge Entry Quality Report
+
+**File**: .kb/typescript/naming/functions.md
+**Version**: 1.0
+**Scope**: typescript | **Category**: naming
+**Lines**: N | **Evaluated**: YYYY-MM-DD
+
+---
+
+## Overall Score: X.X/10 {grade}
+
+{summary}
+
+## Criteria Breakdown
+
+### 1. Clarity: X/10
+...
+
+### 2. Format: X/10
+...
+
+### 3. Structure: X/10
+...
+
+### 4. Completeness: X/10
+...
+
+### 5. Utility/Efficiency: X/10
+...
+
+## Summary
+...
 ```
 
 **Validation**:
-- [ ] Notification appears after file write
-- [ ] Does NOT trigger for README.md writes
-- [ ] Does NOT trigger for TEMPLATE.md writes
-- [ ] Only triggers for convention files
-
-**Test Negative Case**:
-```bash
-# Manually edit .conventions/README.md
-# Hook should NOT trigger
-```
+- [ ] All 5 criteria scored
+- [ ] Grade assigned (Outstanding/Excellent/Good/Adequate/Needs Improvement)
+- [ ] Strengths listed
+- [ ] Recommendations provided
+- [ ] Potential score calculated
 
 ---
 
-### Test 10: Research Integration
-
-**Objective**: Verify codebase research when "best practices" mentioned
-
-**Setup**:
-Create some TypeScript files with patterns:
-```bash
-mkdir -p test-code
-echo "async function fetchData() { try { ... } catch (e) { ... } }" > test-code/sample.ts
-```
+### Test 14: Quality Report for Specific File
 
 **Command**:
 ```bash
-/convention TypeScript error handling best practices
+/knowledge-report functions
 ```
 
 **Expected Behavior**:
-1. Detects "best practices" trigger
-2. Runs codebase research:
-   - Searches for try-catch patterns
-   - Checks tsconfig.json
-   - Looks for existing conventions
-3. Optionally runs web research (if configured)
-4. Merges findings with knowledge
-5. Generates comprehensive convention
+1. Resolves "functions" to a file in `.kb/`
+2. Tries multiple resolution strategies (exact path, glob pattern)
+3. Evaluates found file
+
+**Validation**:
+- [ ] File correctly resolved from partial name
+- [ ] Report generated for correct file
+
+---
+
+### Test 15: Codebase Scan — Discovery Phase
+
+**Objective**: Verify codebase convention discovery
+
+**Command**:
+```bash
+/knowledge-scan
+```
+
+**Expected Behavior**:
+1. `knowledge-scanner` agent activates
+2. Delegates to `codebase-discover` skill
+3. Detects project stack (languages, frameworks, tools)
+4. Analyzes multiple dimensions (naming, structure, patterns, docs)
+5. Calculates confidence scores
+6. Presents discovery plan to user
 
 **Expected Output**:
 ```
-Researching codebase patterns...
-Found 15 try-catch blocks in TypeScript files
-Found tsconfig.json with strict mode enabled
+Project Stack:
+  Languages: typescript, ...
+  Frameworks: react, ...
+  Tools: eslint, prettier, ...
+  Files analyzed: N
 
-✓ Convention file created: .conventions/typescript/patterns/error-handling.md
+Discovered Conventions:
+  #  | Scope      | Category  | Dimension  | Confidence | Files
+  1  | typescript | naming    | functions  | 94%        | 156
+  2  | typescript | naming    | classes    | 88%        | 89
+  ...
 
-Tier: comprehensive
-Research: codebase patterns included
+Options:
+  /knowledge-scan generate all    — Generate all entries
+  /knowledge-scan generate high   — Generate high-confidence only (>=80%)
+  /knowledge-scan generate 1,3,5  — Generate specific entries
 ```
 
 **Validation**:
-- [ ] Convention includes codebase examples
-- [ ] References project patterns
-- [ ] Notes any conflicts between project and best practices
-- [ ] More detailed than without research
+- [ ] Project stack correctly detected
+- [ ] Dimensions analyzed with Grep patterns
+- [ ] Confidence scores calculated (0.0–1.0)
+- [ ] Entries sorted by confidence descending
+- [ ] No Python scripts created during scan
 
 ---
 
-### Test 11: Review Single File (Report Only)
+### Test 16: Codebase Scan — Generation Phase
 
-**Objective**: Verify basic validation without modifications
-
-**Setup**:
-Create a test knowledge entry with intentional issues:
+**Command** (after Test 15):
 ```bash
-# Create entry with missing version field and untagged code block
-echo '---
-type: convention
-scope: typescript
-category: naming
-tags: [functions, naming]
----
-
-# Test Functions
-
-## Format
-
-```
-function testFunc() {}
-```
-' > .kb/typescript/naming/test-functions.md
-```
-
-**Command**:
-```bash
-/knowledge-review test-functions.md
+/knowledge-scan generate high
 ```
 
 **Expected Behavior**:
-1. Finds the file in `.kb/` directory
-2. Runs Level 1 validation (structural checks)
-3. Identifies issues: missing version field, untagged code block
-4. Reports issues without modifying file (mode: none)
-5. Runs Level 3 quality evaluation
+1. Filters discovered entries with confidence >= 0.80
+2. Checks for conflicts with existing `.kb/` entries
+3. Generates entries via `knowledge-writer` agent
+4. Reports created/updated/skipped counts
 
-**Expected Output**:
+**Validation**:
+- [ ] Only high-confidence entries generated
+- [ ] Conflicts detected and handled
+- [ ] Created entries have proper YAML frontmatter
+- [ ] Progress reported per entry
+
+---
+
+### Test 17: Codebase Scan — Auto Mode
+
+**Command**:
+```bash
+/knowledge-scan auto
 ```
-📋 Review: test-functions.md
 
-File: .kb/typescript/naming/test-functions.md
-Version: — | Tier: simple
+**Expected Behavior**:
+1. Runs discovery
+2. Automatically generates all high-confidence entries
+3. Skips entries with conflicts (no user prompts)
+4. Reports results
 
-── Validation ──────────────────────────
-⚠ YAML frontmatter: Missing field 'version'
-✓ Required sections: All present
-⚠ Code blocks: 1 missing language tag
-✓ Heading hierarchy: Valid
+**Validation**:
+- [ ] No interactive prompts
+- [ ] Conflicts auto-skipped
+- [ ] Summary shows created/skipped counts
 
-Fixes applied: 0
+---
 
-── Quality: 6.5/10 (Adequate ⭐⭐) ──
+### Test 18: Review Single Entry
 
-── Recommendations ─────────────────────
-1. Add version field to YAML frontmatter
-2. Add language tag to code block at line 10
-
-Run /knowledge-review test-functions.md --fix to apply fixes
+**Command**:
+```bash
+/knowledge-review functions.md
 ```
+
+**Expected Behavior**:
+1. Finds file in `.kb/`
+2. Runs Level 1 structural validation
+3. Reports issues without modifying file
+4. Includes quality score
 
 **Validation**:
 - [ ] File NOT modified (report-only mode)
-- [ ] Issues correctly identified
+- [ ] Structural issues identified (if any)
 - [ ] Quality score calculated
 - [ ] Recommendations provided
 
 ---
 
-### Test 12: Review with Auto-Fix (Level 1)
-
-**Objective**: Verify safe auto-corrections for structural issues
+### Test 19: Review with Auto-Fix
 
 **Command**:
 ```bash
-/knowledge-review test-functions.md --fix
+/knowledge-review functions.md --fix
 ```
 
 **Expected Behavior**:
-1. Detects same issues as Test 11
-2. Automatically applies Level 1 fixes:
-   - Adds `version: 1.0` to YAML frontmatter
-   - Detects code is TypeScript, adds ` ```typescript` tag
+1. Detects structural issues
+2. Applies safe Level 1 fixes:
+   - Add missing YAML fields (e.g., `version: 1.0`)
+   - Add language tags to code blocks
+   - Fix invalid version format
 3. Reports fixes applied
-4. No user confirmation required (safe transformations)
-
-**Expected Output**:
-```
-📋 Review: test-functions.md
-
-File: .kb/typescript/naming/test-functions.md
-Version: 1.0 | Tier: simple
-
-── Validation ──────────────────────────
-✓ YAML frontmatter: Valid
-✓ Required sections: All present
-⚠ Code blocks: 1 missing language tag → fixed
-✓ Heading hierarchy: Valid
-
-Fixes applied: 2
-- [yaml] Added field 'version: 1.0'
-- [code_block] line 10: added language tag "typescript"
-
-── Quality: 7.5/10 (Good ⭐⭐⭐) ──
-```
 
 **Validation**:
 - [ ] File IS modified
-- [ ] Version field added to YAML
-- [ ] Code block has `typescript` tag
-- [ ] Fixes logged in output
-- [ ] Quality score improved
-
-**Check File**:
-```bash
-head -15 .kb/typescript/naming/test-functions.md
-# Should now have version: 1.0 and ```typescript
-```
+- [ ] Fixes correctly applied
+- [ ] Fix details reported
+- [ ] Quality score improved after fixes
 
 ---
 
-### Test 13: Batch Review Directory
-
-**Objective**: Verify batch processing with continue-on-failure
-
-**Setup**:
-Create multiple test entries with various issues:
-```bash
-# Entry 1: missing tags field
-echo '---
-type: convention
-version: 1.0
-scope: typescript
-category: rules
----
-# Test Rule' > .kb/typescript/rules/test-rule.md
-
-# Entry 2: invalid version format
-echo '---
-type: convention
-version: 1
-scope: typescript
-category: rules
-tags: [test]
----
-# Another Rule' > .kb/typescript/rules/another-rule.md
-```
+### Test 20: Batch Review
 
 **Command**:
 ```bash
@@ -588,110 +664,125 @@ tags: [test]
 ```
 
 **Expected Behavior**:
-1. Globs all `.md` files in `typescript/` (exclude READMEs)
+1. Globs all `.md` files in scope directory
 2. Processes each file independently
-3. Continues on failure (if one file has error, continues to next)
-4. Applies Level 1 fixes to all files
-5. Aggregates statistics
-
-**Expected Output**:
-```
-📋 Batch Review: .kb/typescript/
-
-Scanned: 3 files | Fixes: 3 across 2 files | Avg Quality: 7.4/10
-
-── Issues ──────────────────────────────
-❌ Critical (auto-fixed): 3
-  • 1× missing field: tags
-  • 1× invalid version format (1 → 1.0)
-  • 1× code block missing language tag
-
-── Files Requiring Attention ───────────
-  7.0/10  rules/test-rule.md          (1 issue fixed)
-  7.5/10  rules/another-rule.md       (1 issue fixed)
-
-── Next Steps ──────────────────────────
-✓ All critical issues fixed automatically
-⚠ Run /knowledge-reindex to update catalog
-```
+3. Continues on failure
+4. Aggregates statistics
 
 **Validation**:
 - [ ] All files processed
-- [ ] Statistics aggregated correctly
-- [ ] Fixes applied to multiple files
-- [ ] Files sorted by quality (worst first)
-- [ ] No crash on errors
+- [ ] Per-file results reported
+- [ ] Aggregate statistics accurate
+- [ ] Batch continues on individual errors
 
 ---
 
-### Test 14: Auto-Review Hook Trigger
+### Test 21: PostToolUse Hook
 
-**Objective**: Verify PostToolUse hook auto-reviews new entries
+**Objective**: Verify automatic notification after entry creation
 
 **Command**:
 ```bash
-/knowledge-add TypeScript constants use UPPER_SNAKE_CASE
+/knowledge-add TypeScript async functions: use try-catch, await properly
 ```
 
-**Expected Behavior**:
-1. knowledge-writer creates new entry via Write tool
-2. PostToolUse hook triggers on Write
-3. Hook runs Level 1 validation automatically
-4. Silently fixes any structural issues
-5. Shows brief summary (max 3 lines)
-6. Reminds to run `/knowledge-reindex`
-
-**Expected Output**:
+**Expected Notification** (after file write):
 ```
-✓ Knowledge entry created: .kb/typescript/naming/constants.md
-
-Tier: simple
-Lines: ~45
-Version: 1.0
-
-✓ Auto-review: 0 issues found
-Run /knowledge-reindex to update catalog.
-```
-
-**If issues are auto-fixed**:
-```
-✓ Knowledge entry created: .kb/typescript/naming/constants.md
-
-Tier: simple
-Lines: ~45
-Version: 1.0
-
-✓ Auto-review: 1 fix applied (code_block tag)
-Run /knowledge-reindex to update catalog.
+✓ Convention file updated. Run /knowledge-reindex to update catalog.
 ```
 
 **Validation**:
-- [ ] Hook triggers automatically after Write
-- [ ] Level 1 fixes applied silently
-- [ ] Brief output (not verbose)
-- [ ] Reminder to reindex shown
-- [ ] No recursion (hook doesn't trigger on Edit during fix)
+- [ ] Notification appears after Write to `.kb/**/*.md`
+- [ ] Does NOT trigger for `.kb/README.md` writes
+- [ ] Does NOT trigger for `.kb/TEMPLATE.md` writes
 
-**Check Hook Behavior**:
-```bash
-# Create entry with missing code tag
-echo '---
-type: convention
-version: 1.0
-scope: python
-category: naming
-tags: [variables]
 ---
-# Variables
 
-```
-x = 1
-```' > .kb/python/naming/variables.md
+### Test 22: Research Integration
 
-# Hook should auto-fix the code block tag
-# Check if tag was added
-grep '```python' .kb/python/naming/variables.md
+**Objective**: Verify codebase/web research triggers
+
+**Command**:
+```bash
+/knowledge-add TypeScript error handling best practices
 ```
+
+**Expected Behavior**:
+1. Detects "best practices" trigger → web research
+2. Low rule count (< 3) → additional research trigger
+3. Searches codebase for try-catch patterns
+4. Optionally runs WebSearch
+5. Merges findings into comprehensive entry
+
+**Validation**:
+- [ ] Research triggered (codebase or web)
+- [ ] Entry enriched with discovered patterns
+- [ ] Quality higher than without research
+
+---
+
+## Edge Cases
+
+### Test E1: No Arguments
+
+**Command**:
+```bash
+/knowledge-add
+```
+
+**Expected**: Usage help displayed with examples
+
+### Test E2: Invalid Type
+
+**Command**:
+```bash
+/knowledge-add type:invalid Some guidelines
+```
+
+**Expected**: Error listing valid types: convention, rule, pattern, guide, documentation, reference, style, environment
+
+### Test E3: Path Traversal Attempt
+
+**Command**:
+```bash
+/knowledge-add ../../etc/passwd
+```
+
+**Expected**: Error: "Path cannot contain '..'"
+
+### Test E4: Empty Knowledge Base
+
+**Command** (with no `.kb/` directory):
+```bash
+/knowledge-report
+```
+
+**Expected**: Error indicating no knowledge entries found, with suggestion to create first entry
+
+### Test E5: Non-Existent File Report
+
+**Command**:
+```bash
+/knowledge-report nonexistent-file
+```
+
+**Expected**: Error with search paths tried and usage hint
+
+---
+
+## Performance Benchmarks
+
+| Operation | Expected Time | Notes |
+|-----------|---------------|-------|
+| Create entry (simple text) | < 15 seconds | Includes quality evaluation |
+| Create entry (with research) | < 30 seconds | Codebase + web research |
+| Rebuild index (10 entries) | < 5 seconds | Glob + Read + Write |
+| Rebuild index (100 entries) | < 15 seconds | Should scale linearly |
+| Quality report (deep mode) | < 30 seconds | Full 5-criteria evaluation |
+| Codebase scan (discovery) | < 60 seconds | Depends on project size |
+| Codebase scan (generation, 5 entries) | < 120 seconds | 5x entry creation |
+| Review single file | < 10 seconds | Level 1 + quality score |
+| Review batch (20 files) | < 60 seconds | Level 1 per file |
 
 ---
 
@@ -699,134 +790,100 @@ grep '```python' .kb/python/naming/variables.md
 
 After running all tests, verify:
 
-### Plugin Structure
-- [ ] All 9 files present in `.claude/plugins/conventions/`
-- [ ] No syntax errors in markdown files
-- [ ] YAML front matter valid in all files
+### Plugin Integrity
+- [ ] Version is 1.4.0 in `plugin.json`
+- [ ] All 11 instruction files contain EXECUTION CONSTRAINT block
+- [ ] Zero `\`\`\`python` code blocks in any instruction file
+- [ ] Zero Python imports in any instruction file
 
-### Convention Files
-- [ ] All created conventions have valid YAML
+### Knowledge Entries
+- [ ] All created entries have valid YAML frontmatter
 - [ ] Required fields present: type, version, scope, category, tags
-- [ ] Versions follow semantic versioning
+- [ ] Versions follow semantic format (major.minor)
 - [ ] Code blocks have language tags
-- [ ] Line counts within tier ranges (±20%)
-
-### Index
-- [ ] README.md generated successfully
-- [ ] All conventions listed
-- [ ] Correct grouping by scope/category
-- [ ] Statistics accurate
-- [ ] Relative paths work
+- [ ] Comprehensive tier content (150-300 lines)
 
 ### Commands
-- [ ] `/convention` works with direct input
-- [ ] `/convention interactive` prompts correctly
-- [ ] `/convention --path` respects custom paths
-- [ ] `/rebuild-index` generates valid catalog
+- [ ] `/knowledge-add` — creates entries from text, file, URL, directory
+- [ ] `/knowledge-reindex` — rebuilds README hierarchy
+- [ ] `/knowledge-reindex --review` — adds validation check
+- [ ] `/knowledge-report` — generates detailed quality report
+- [ ] `/knowledge-report <name>` — resolves partial names
+- [ ] `/knowledge-scan` — discovers codebase conventions
+- [ ] `/knowledge-scan generate` — creates entries from discoveries
+- [ ] `/knowledge-review` — validates entries
+
+### Agents
+- [ ] `knowledge-writer` — orchestrates entry creation
+- [ ] `knowledge-evaluator` — deep quality analysis
+- [ ] `knowledge-scanner` — codebase convention discovery
+
+### Skills
+- [ ] `knowledge-draft` — transforms guidelines into structured entries
+- [ ] `knowledge-evaluate` — scores entries across 5 criteria
+- [ ] `codebase-discover` — detects project stack and patterns
+- [ ] `knowledge-review` — structural validation and auto-fix
 
 ### Hooks
-- [ ] PostToolUse auto-review triggers on Write
-- [ ] Only triggers for knowledge entry file changes
-- [ ] Level 1 fixes applied automatically
-- [ ] No recursion (doesn't trigger on Edit during fixes)
-- [ ] Brief summary output (max 3 lines)
+- [ ] PostToolUse triggers on `.kb/**/*.md` writes
+- [ ] Excludes README.md and TEMPLATE.md
+- [ ] Shows reminder to run `/knowledge-reindex`
 
-### Review System
-- [ ] `/knowledge-review` reports issues without --fix flag
-- [ ] `/knowledge-review --fix` applies Level 1 auto-fixes
-- [ ] `/knowledge-review --fix-all` prompts for Level 2 confirmations
-- [ ] Batch processing continues on failure
-- [ ] Quality scores calculated correctly
-- [ ] Idempotent (running twice shows 0 fixes on second run)
-- [ ] Auto-review hook works after Write operations
-- [ ] `/knowledge-reindex --review` adds validation check
-
-### Edge Cases
-- [ ] File conflicts handled gracefully
-- [ ] Insufficient input prompts for more info
-- [ ] Invalid paths rejected
-- [ ] Russian input processed correctly
-
-## Performance Benchmarks
-
-Expected performance:
-
-| Operation | Expected Time | Notes |
-|-----------|---------------|-------|
-| Simple convention | <5 seconds | No research |
-| Standard convention | <8 seconds | Basic research |
-| Comprehensive convention | <15 seconds | Full research |
-| Rebuild index (10 files) | <2 seconds | Fast glob + parse |
-| Rebuild index (100 files) | <5 seconds | Should scale |
-| Review single file | <3 seconds | Includes quality evaluation |
-| Review batch (20 files) | <60 seconds | Level 1 + Level 3 fast mode |
-| Auto-review hook | <1 second | Level 1 only, silent fixes |
-
-## Troubleshooting
-
-### Common Issues
-
-**Issue**: Command not recognized
-```
-Solution: Verify plugin is in .claude/plugins/conventions/
-Check: ls -la .claude/plugins/
-```
-
-**Issue**: File not created
-```
-Solution: Check for error messages in output
-Check: Provide more detailed guidelines
-Try: Interactive mode for step-by-step
-```
-
-**Issue**: YAML validation fails
-```
-Solution: Check YAML syntax in generated file
-Look for: Missing colons, incorrect array syntax
-Auto-fix: Plugin should generate valid YAML
-```
-
-**Issue**: Index not updating
-```
-Solution: Ensure files are in .conventions/
-Check: YAML front matter is valid
-Verify: File not in excluded paths
-```
-
-## Reporting Issues
-
-If tests fail, collect:
-1. Command used
-2. Expected behavior
-3. Actual behavior
-4. Error messages (if any)
-5. Generated file content (first 50 lines)
-6. Plugin version
-
-Report to: GitHub issues in ai-knowledge-base repository
+### Python Prevention (Critical)
+- [ ] No `.py` files created during any test
+- [ ] No `python`/`python3` Bash commands executed
+- [ ] No Python library imports (`json`, `yaml`, `os`, `re`) used
+- [ ] All YAML/JSON parsed "mentally" from Read output
+- [ ] All `invoke_skill()`/`invoke_agent()` references are pseudocode only
 
 ---
 
-## Test Summary Template
+## Test Results Template
 
 ```
 # Test Results
 
 Date: YYYY-MM-DD
 Tester: [Name]
-Plugin Version: 1.0.0
+Plugin Version: 1.4.0
+Claude Code Version: [Version]
 
-## Tests Passed
-- [ ] Test 1: Simple Convention
-- [ ] Test 2: Standard Convention
-- [ ] Test 3: Interactive Mode
-- [ ] Test 4: Custom Path
-- [ ] Test 5: File Conflict
-- [ ] Test 6: Insufficient Input
-- [ ] Test 7: Russian Input
-- [ ] Test 8: Rebuild Index
-- [ ] Test 9: PostToolUse Hook
-- [ ] Test 10: Research Integration
+## Python Prevention Tests
+- [ ] P1: No Python during entry creation
+- [ ] P2: No Python during codebase scan
+- [ ] P3: No Python during quality evaluation
+- [ ] P4: Execution constraint blocks present
+
+## Functional Tests
+- [ ] Test 1: Basic entry creation
+- [ ] Test 2: Multiple rules entry
+- [ ] Test 3: Explicit parameters
+- [ ] Test 4: URL source
+- [ ] Test 5: Local file source
+- [ ] Test 6: Batch directory
+- [ ] Test 7: Russian input
+- [ ] Test 8: Ambiguous scope
+- [ ] Test 9: Minor update
+- [ ] Test 10: Major update (confirmation)
+- [ ] Test 11: Rebuild index
+- [ ] Test 12: Rebuild index + review
+- [ ] Test 13: Quality report (latest)
+- [ ] Test 14: Quality report (by name)
+- [ ] Test 15: Codebase scan (discovery)
+- [ ] Test 16: Codebase scan (generate high)
+- [ ] Test 17: Codebase scan (auto mode)
+- [ ] Test 18: Review single entry
+- [ ] Test 19: Review with auto-fix
+- [ ] Test 20: Batch review
+- [ ] Test 21: PostToolUse hook
+- [ ] Test 22: Research integration
+
+## Edge Cases
+- [ ] E1: No arguments
+- [ ] E2: Invalid type
+- [ ] E3: Path traversal
+- [ ] E4: Empty knowledge base
+- [ ] E5: Non-existent file
 
 ## Issues Found
 1. [Issue description]
@@ -834,4 +891,50 @@ Plugin Version: 1.0.0
 
 ## Notes
 - [Any observations or suggestions]
+```
+
+---
+
+## Troubleshooting
+
+### Command Not Recognized
+
+```
+Solution: Verify plugin is installed
+Check: claude --plugin-dir ./plugins/knowledge-base
+Or: ls .claude/plugins/knowledge-base/
+```
+
+### Entry Not Created
+
+```
+Solution: Check output for errors
+Common: Ambiguous scope/category → answer AskUserQuestion prompt
+Try: Add explicit parameters: /knowledge-add scope:typescript category:naming ...
+```
+
+### Python Script Created (v1.4.0 regression)
+
+```
+This should NEVER happen in v1.4.0.
+If it does:
+1. Note which command triggered it
+2. Check which agent/skill was active
+3. Verify EXECUTION CONSTRAINT block is present in the relevant .md file
+4. Report as critical bug
+```
+
+### Quality Score Too Low
+
+```
+Solution: Provide richer input with more rules and examples
+Or: Run /knowledge-report for detailed recommendations
+Auto-improve: /knowledge-review <file> --fix for structural fixes
+```
+
+### Index Out of Date
+
+```
+Solution: Run /knowledge-reindex after creating/modifying entries
+The PostToolUse hook should remind you automatically
 ```

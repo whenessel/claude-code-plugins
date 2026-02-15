@@ -8,6 +8,13 @@ allowed-tools:
 context: fork
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Review Skill
 
 This skill provides comprehensive validation checklists and fix strategies for knowledge base entries, organized into three validation levels.
@@ -82,32 +89,29 @@ STATUS: pass | partial | fail
 
 **Code Language Detection Logic**:
 
-```python
-def detect_code_language(code: str, file_scope: str) -> str:
-    """Detect programming language from code block content."""
+```text
+CODE LANGUAGE DETECTION LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    # TypeScript: const, let, interface, type, =>
-    if re.search(r'\b(const|let|interface|type)\b', code):
-        return 'typescript' if re.search(r'\b(interface|type )\b', code) else 'javascript'
+Check code block content against these patterns in order (first match wins):
 
-    # Python: def, import, class, print(
-    if re.search(r'\b(def |import |class |print\()', code):
-        return 'python'
+1. TypeScript/JavaScript: matches \b(const|let|interface|type)\b
+   - If also matches \b(interface|type )\b → "typescript"
+   - Otherwise → "javascript"
 
-    # Bash: #!/, echo, ls, cd, mkdir
-    if code.startswith('#!') or re.search(r'\b(echo|ls|cd|mkdir)\b', code):
-        return 'bash'
+2. Python: matches \b(def |import |class |print\()
+   → "python"
 
-    # Go: func, package, fmt.
-    if re.search(r'\b(func |package |fmt\.)', code):
-        return 'go'
+3. Bash: starts with #! OR matches \b(echo|ls|cd|mkdir)\b
+   → "bash"
 
-    # React: JSX syntax, hooks
-    if re.search(r'(<\w+|useState|useEffect)', code):
-        return 'tsx' if 'interface' in code else 'jsx'
+4. Go: matches \b(func |package |fmt\.)
+   → "go"
 
-    # Fallback to file scope
-    return file_scope
+5. React/JSX: matches (<\w+|useState|useEffect)
+   - If code contains "interface" → "tsx"
+   - Otherwise → "jsx"
+
+6. Fallback: use the file's scope as the language tag
 ```
 
 ### Path Consistency Checks
@@ -126,32 +130,19 @@ def detect_code_language(code: str, file_scope: str) -> str:
 
 Automatically detect entry tier based on content metrics:
 
-```python
-def detect_tier(content, sections, rules_count, code_blocks_count):
-    """Detect knowledge entry tier from content analysis."""
+```text
+TIER DETECTION LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    # Simple: minimal structure
-    if rules_count <= 3 and code_blocks_count <= 2:
-        return 'simple', {
-            'min_lines': 50,
-            'max_lines': 100,
-            'min_examples': 1
-        }
+Determine tier from content metrics (check in order, first match wins):
 
-    # Comprehensive: full structure with subsections
-    if rules_count >= 7 and code_blocks_count >= 12 and len(sections) >= 8:
-        return 'comprehensive', {
-            'min_lines': 400,
-            'max_lines': 650,
-            'min_examples': 5
-        }
+1. SIMPLE tier: rules_count <= 3 AND code_blocks_count <= 2
+   Thresholds: min_lines=50, max_lines=100, min_examples=1
 
-    # Standard: default tier
-    return 'standard', {
-        'min_lines': 150,
-        'max_lines': 300,
-        'min_examples': 3
-    }
+2. COMPREHENSIVE tier: rules_count >= 7 AND code_blocks_count >= 12 AND sections >= 8
+   Thresholds: min_lines=400, max_lines=650, min_examples=5
+
+3. STANDARD tier (default): everything else
+   Thresholds: min_lines=150, max_lines=300, min_examples=3
 ```
 
 ### Tier Compliance Checks
@@ -187,15 +178,7 @@ def detect_tier(content, sections, rules_count, code_blocks_count):
 
 Delegate to existing `knowledge-evaluate` skill in **fast mode**:
 
-```python
-evaluation_result = invoke_skill(
-    skill="knowledge-evaluate",
-    params={
-        "file_path": resolved_path,
-        "mode": "fast"  # Quick structural analysis (<2s)
-    }
-)
-```
+Use the **Task** tool to delegate to the `knowledge-evaluate` skill in fast mode, passing the resolved file path and `mode: "fast"` (quick structural analysis, under 2 seconds).
 
 **Quality criteria evaluated**:
 - **Clarity**: Must vs should consistency, vague language detection
@@ -205,10 +188,7 @@ evaluation_result = invoke_skill(
 - **Structure**: Logical flow, concept separation
 
 **Output parsing**: Extract scores from text-based evaluation result:
-```python
-match = re.search(r'Quality: ([\d.]+)/10 \(Clarity: (\d+), Format: (\d+)', result)
-overall_score = float(match.group(1))
-```
+Parse the evaluation result text mentally: look for the pattern `Quality: {score}/10 (Clarity: {n}, Format: {n}, ...)` and extract the overall score and individual criterion scores.
 
 **No auto-fix**: Quality assessment produces recommendations only, never modifies files.
 

@@ -4,6 +4,13 @@ description: Create a standardized knowledge entry from raw guidelines
 argument-hint: "[type:X] [scope:Y] [category:Z] <guidelines text, file, directory, or URL>"
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Add Command
 
 Create a standardized knowledge entry in `.kb/` directory.
@@ -24,117 +31,42 @@ Create a standardized knowledge entry in `.kb/` directory.
 ### Parse Arguments
 
 1. **Auto-detect file paths/URLs** in arguments:
-   ```python
-   def detect_file_source(args: list[str]) -> tuple[str, str, list[str]]:
-       """
-       Returns: (source_type, source_path, remaining_args)
-       source_type: "url", "directory", "path", or None
-       """
+   Detect the source type from arguments using this decision tree:
 
-       # Check for URLs
-       url_pattern = r'https?://[^\s]+'
-       for arg in args:
-           if re.match(url_pattern, arg):
-               remaining = [a for a in args if a != arg]
-               return ("url", arg, remaining)
-
-       # Check for directories FIRST (before files)
-       for arg in args:
-           if '/' in arg and os.path.isdir(arg):
-               remaining = [a for a in args if a != arg]
-               return ("directory", arg, remaining)
-
-       # Check for file paths (.md, .txt, contains /)
-       for arg in args:
-           if (arg.endswith(('.md', '.txt')) or '/' in arg):
-               if os.path.exists(arg):
-                   remaining = [a for a in args if a != arg]
-                   return ("path", arg, remaining)
-
-       return (None, None, args)
-   ```
+   - **URL check**: Scan arguments for one matching the pattern `https?://[^\s]+`. If found, source_type is `"url"`, remove it from remaining args.
+   - **Directory check**: For each argument containing `/`, use **Bash** `test -d {arg}` to check if it is a directory. If found, source_type is `"directory"`, remove it from remaining args.
+   - **File path check**: For each argument ending with `.md` or `.txt`, or containing `/`, use **Read** to check if the file exists (handle error for missing). If found, source_type is `"path"`, remove it from remaining args.
+   - **No source detected**: If none of the above matched, source_type is `None`, all args remain.
 
 2. **Read file source** if detected:
-   ```python
-   if source_type == "url":
-       content = WebFetch(
-           url=source_path,
-           prompt="Extract full content preserving structure"
-       )
-
-   elif source_type == "path":
-       # Security: no .. in path
-       if ".." in source_path:
-           error("Path cannot contain '..'")
-
-       # Size limit: 10MB, 10k lines
-       if file_size > 10*1024*1024:
-           error("File too large")
-
-       content = Read(source_path)
-   ```
+   - If source_type is `"url"`: Use **WebFetch** with the URL and prompt "Extract full content preserving structure"
+   - If source_type is `"path"`:
+     - **Security check**: If the path contains `..`, report error: "Path cannot contain '..'"
+     - **Size limit**: 10MB max, 10k lines max
+     - Use **Read** to load the file content
 
 3. **Parse explicit type/scope/category**:
-   ```python
-   # Extract "type:rule", "scope:typescript" or "category:naming"
-   for arg in remaining_args:
-       if match := re.match(r'type:(\w+)', arg):
-           explicit_type = match.group(1)
-           valid_types = ["convention", "rule", "pattern", "guide", "documentation", "reference", "style", "environment"]
-           if explicit_type not in valid_types:
-               error(f"Invalid type '{explicit_type}'. Valid: {', '.join(valid_types)}")
-       elif match := re.match(r'scope:(\w+)', arg):
-           explicit_scope = match.group(1)
-       elif match := re.match(r'category:(\w+)', arg):
-           explicit_category = match.group(1)
+   Scan each remaining argument for explicit parameter patterns and extract values:
 
-   # Remove from remaining_args
-   ```
+   - Match `type:(\w+)` — extract as `explicit_type`. Validate against allowed types: convention, rule, pattern, guide, documentation, reference, style, environment. If invalid, report error with the list of valid types.
+   - Match `scope:(\w+)` — extract as `explicit_scope`
+   - Match `category:(\w+)` — extract as `explicit_category`
+
+   Remove any matched parameter arguments from the remaining arguments list.
 
 4. **Remaining = guidelines**:
-   ```python
-   guidelines = ' '.join(remaining_args)
-   ```
+   Combine all remaining arguments (after removing source and explicit parameters) into a single guidelines text string, joined by spaces.
 
 ### Invoke Agent
 
 Pass collected data to knowledge-writer agent:
 
-```python
-# Build prompt based on source type
-if source_type == "directory":
-    prompt = f"""
-    Batch process all markdown files in directory: {source_path}
+Use the **Task** tool to delegate to the `knowledge-writer` agent. Build the prompt based on source type:
 
-    For each .md file in the directory:
-    1. Read the file content
-    2. Create a convention from its guidelines
-    3. Track results (success/failure)
+- **If source_type is "directory"**: Include the directory path and instruct the agent to batch-process all `.md` files (excluding README.md), reading each file and creating a knowledge entry. Include any explicit type, scope, and category if provided.
+- **Otherwise**: Include the guidelines text (or fetched content if from URL/file) and any explicit type, scope, category, and source path.
 
-    {"Explicit type: " + explicit_type if explicit_type else ""}
-    {"Explicit scope: " + explicit_scope if explicit_scope else ""}
-    {"Explicit category: " + explicit_category if explicit_category else ""}
-
-    Filter: Only process files ending in .md, exclude README.md
-    """
-else:
-    prompt = f"""
-    Create a knowledge entry from the following guidelines:
-
-    {guidelines if not content else content}
-
-    {"Explicit type: " + explicit_type if explicit_type else ""}
-    {"Explicit scope: " + explicit_scope if explicit_scope else ""}
-    {"Explicit category: " + explicit_category if explicit_category else ""}
-    {"Source: " + source_path if source_path else ""}
-    """
-
-Task(
-  description="Create or update knowledge entry(s)",
-  prompt=prompt,
-  subagent_type="knowledge-writer"
-)
-```
+The Task description should be "Create or update knowledge entry(s)" with `subagent_type="knowledge-writer"`.
 
 ### Error Handling
 

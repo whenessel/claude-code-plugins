@@ -8,6 +8,13 @@ description: >
 allowed-tools: Read, Grep, Glob, Write, Bash
 ---
 
+> **⚠️ EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Draft Knowledge Entry Skill
 
 Transform raw coding guidelines into structured knowledge entry files.
@@ -73,22 +80,20 @@ Check for Cyrillic characters to detect Russian input. If detected:
 - "общепринятые стандарты"
 
 **Auto-trigger web research if input quality is low:**
-```python
-def should_research_web(guidelines: str, rule_count: int) -> bool:
-    # Russian or English triggers
-    ru_triggers = ["лучшие практики", "стандарты индустрии", "рекомендуемый подход", "как лучше"]
-    en_triggers = ["best practices", "industry standard", "recommended approach", "state of the art"]
+```text
+DECISION LOGIC (reference — do NOT execute as code):
 
-    has_trigger = any(t in guidelines.lower() for t in ru_triggers + en_triggers)
+should_research_web(guidelines, rule_count):
+  ru_triggers = ["лучшие практики", "стандарты индустрии", "рекомендуемый подход", "как лучше"]
+  en_triggers = ["best practices", "industry standard", "recommended approach", "state of the art"]
 
-    # Low quality input (< 3 rules, no examples)
-    low_quality = rule_count < 3 and "example" not in guidelines.lower()
+  has_trigger = any trigger found in guidelines (case-insensitive)
 
-    # Explicit skip
-    skip = any(p in guidelines.lower() for p in
-               ["skip research", "no research", "без исследования"])
+  low_quality = rule_count < 3 AND "example" not in guidelines (case-insensitive)
 
-    return (has_trigger or low_quality) and not skip
+  skip = any of ["skip research", "no research", "без исследования"] found in guidelines
+
+  return (has_trigger OR low_quality) AND NOT skip
 ```
 
 ### Step 3: Conduct Research
@@ -98,81 +103,59 @@ def should_research_web(guidelines: str, rule_count: int) -> bool:
 If codebase analysis triggered by keywords:
 
 1. **Generate search patterns** based on topic:
-   ```python
-   def generate_patterns(topic: str) -> list[str]:
-       patterns = {
-           "error handling": ["try", "catch", "throw", "Error("],
-           "function naming": ["function ", "const.*=>", "async function"],
-           "imports": ["import ", "from '", "require("]
-       }
+   **Pattern generation lookup table:**
 
-       for key, pats in patterns.items():
-           if key in topic.lower():
-               return pats
-
-       return topic.split()  # Generic: topic words
-   ```
+   | Topic Contains | Search Patterns |
+   |---------------|----------------|
+   | "error handling" | `try`, `catch`, `throw`, `Error(` |
+   | "function naming" | `function `, `const.*=>`, `async function` |
+   | "imports" | `import `, `from '`, `require(` |
+   | *(other)* | Split topic into individual words |
 
 2. **Search codebase** using Grep:
-   ```python
-   results = []
-   for pattern in search_patterns:
-       grep_result = Grep(
-           pattern=pattern,
-           type=file_types[scope],  # e.g., "ts,tsx"
-           output_mode="files_with_matches",
-           head_limit=20
-       )
-       results.extend(grep_result)
-   ```
+   For each search pattern from the table above:
+   1. Use **Grep** tool with:
+      - pattern: the search pattern
+      - type: file types for the detected scope (e.g., `ts` for TypeScript, `py` for Python)
+      - output_mode: `"files_with_matches"`
+      - head_limit: 20
+   2. Add all matching file paths to a combined results list
 
 3. **Read examples** (up to 20 files):
-   ```python
-   examples = []
-   for file_path in unique_files[:20]:
-       content = Read(file_path)
-       relevant = extract_relevant_code(content, topic)
-       examples.append({"path": file_path, "snippet": relevant})
-   ```
+   For each unique file path (up to 20):
+   1. Use **Read** tool to get the file content
+   2. Extract code sections relevant to the topic
+   3. Store as: `{path: file_path, snippet: relevant_code}`
 
 4. **Analyze patterns**:
-   ```python
-   # Statistical analysis of naming, structure, etc.
-   analysis = analyze_code_patterns(examples, topic)
-   ```
+   Analyze the collected code examples to identify statistical patterns (naming conventions, structure, frequencies) relevant to the topic.
 
 5. **Check linter configs**:
-   ```python
-   configs = Glob(pattern="**/{.eslintrc*,tsconfig.json,.prettierrc*}")
-   rules = extract_relevant_rules(configs, topic)
-   ```
+   Use **Glob** tool with pattern `**/{.eslintrc*,tsconfig.json,.prettierrc*}` to find linter configuration files. Then use **Read** to examine them and extract rules relevant to the current topic.
 
 6. **Format as guidelines**:
-   ```python
-   codebase_guidelines = f"""
+   Format the discovered patterns as guidelines text:
+
+   ```text
    Discovered patterns from codebase:
-   - {analysis['dominant_pattern']}
-   - Found in {len(examples)} files
+   - {dominant_pattern description}
+   - Found in {example_count} files
 
    Examples:
-   {examples[:3]}
+   {top 3 code examples}
 
    Linter rules:
-   {rules}
-   """
+   {relevant linter rules}
    ```
 
 **B. Web Research (if triggered):**
 
 Use WebSearch for best practices:
 
-```python
-query = f"{topic} best practices 2026"
-if input_language == "russian":
-    query = f"{translate_to_english(topic)} best practices 2026"
-
-results = WebSearch(query, limit=3)
-```
+Use **WebSearch** tool:
+- Query: `"{topic} best practices 2026"`
+- If input language is Russian, translate the topic to English first
+- Limit: 3 results
 
 **Merge findings:**
 ```
@@ -186,19 +169,19 @@ Priority:
 
 **ALWAYS generate Comprehensive tier:**
 
-```python
-tier = "comprehensive"  # Fixed, no detection needed
-target_lines = 150-300
-required_sections = [
-    "Title",
-    "Description (2-3 paragraphs)",
-    "Format (4+ bullet points)",
-    "Domain sections with subsections",
-    "Allowed (4+ examples)",
-    "Forbidden (4+ anti-patterns)",
-    "Rules (7+ guidelines)",
-    "Summary table"
-]
+```yaml
+# Fixed tier (always comprehensive)
+tier: comprehensive
+target_lines: 150-300
+required_sections:
+  - Title
+  - "Description (2-3 paragraphs)"
+  - "Format (4+ bullet points)"
+  - "Domain sections with subsections"
+  - "Allowed (4+ examples)"
+  - "Forbidden (4+ anti-patterns)"
+  - "Rules (7+ guidelines)"
+  - Summary table
 ```
 
 **Content generation strategy:**
@@ -225,177 +208,129 @@ If user input is detailed:
 
 **Scope detection with confidence:**
 
-```python
-def detect_scope(guidelines: str, explicit_scope: str = None) -> tuple[str, float]:
-    if explicit_scope:
-        return explicit_scope, 1.0  # User-specified
+```text
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    # Indicators for each scope
-    scope_indicators = {
-        "typescript": ["typescript", "ts", ".ts", "type", "interface"],
-        "python": ["python", "py", "def ", "class ", "import "],
-        "react": ["react", "component", "jsx", "tsx", "hook"],
-        "fastapi": ["fastapi", "pydantic", "endpoint"],
-        "general": ["any language", "language-agnostic"]
-    }
+detect_scope(guidelines, explicit_scope):
+  If explicit_scope provided: return (explicit_scope, confidence=1.0)
 
-    # Score each scope
-    scores = {}
-    for scope, indicators in scope_indicators.items():
-        count = sum(1 for ind in indicators if ind in guidelines.lower())
-        scores[scope] = count / len(indicators)
+  Scope indicators:
+    typescript: ["typescript", "ts", ".ts", "type", "interface"]
+    python:     ["python", "py", "def ", "class ", "import "]
+    react:      ["react", "component", "jsx", "tsx", "hook"]
+    fastapi:    ["fastapi", "pydantic", "endpoint"]
+    general:    ["any language", "language-agnostic"]
 
-    best_scope = max(scores, key=scores.get)
-    confidence = scores[best_scope]
+  For each scope: score = (matches found in guidelines) / (total indicators for that scope)
+  Best scope = highest score
+  Confidence = that score value
 
-    return best_scope, confidence
-
-# Usage
-scope, confidence = detect_scope(guidelines, explicit_scope)
-
-if confidence < 0.7 and not explicit_scope:
-    # Return to agent for AskUserQuestion
-    return {
-        "status": "scope_ambiguous",
-        "detected": scope,
-        "confidence": confidence,
-        "options": list(scope_indicators.keys())
-    }
-else:
-    use_detected_scope(scope)
+  If confidence < 0.7 AND no explicit_scope:
+    → Signal "scope_ambiguous" with detected scope, confidence, and list of all scope options
+    → Agent will use AskUserQuestion to clarify with user
+  Else:
+    → Proceed with the detected scope
 ```
 
 **Category detection with confidence:**
 
-```python
-def detect_category(guidelines: str, topic: str, explicit_category: str = None) -> tuple[str, float]:
-    if explicit_category:
-        return explicit_category, 1.0
+```text
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    category_indicators = {
-        "naming": ["name", "naming", "camelCase", "snake_case"],
-        "rules": ["limit", "constraint", "must not exceed", "maximum"],
-        "docs": ["document", "comment", "jsdoc", "docstring"],
-        "structure": ["organize", "folder", "directory", "file structure"],
-        "patterns": ["pattern", "practice", "handle", "error", "state"]
-    }
+detect_category(guidelines, topic, explicit_category):
+  If explicit_category provided: return (explicit_category, confidence=1.0)
 
-    combined = (guidelines + " " + topic).lower()
+  Category indicators:
+    naming:    ["name", "naming", "camelCase", "snake_case"]
+    rules:     ["limit", "constraint", "must not exceed", "maximum"]
+    docs:      ["document", "comment", "jsdoc", "docstring"]
+    structure: ["organize", "folder", "directory", "file structure"]
+    patterns:  ["pattern", "practice", "handle", "error", "state"]
 
-    scores = {}
-    for category, indicators in category_indicators.items():
-        count = sum(1 for ind in indicators if ind in combined)
-        scores[category] = count / len(indicators)
+  combined = (guidelines + " " + topic), lowercased
+  For each category: score = (matches in combined) / (total indicators)
 
-    # Check for ambiguity
-    sorted_scores = sorted(scores.values(), reverse=True)
-    if len(sorted_scores) > 1 and sorted_scores[0] - sorted_scores[1] < 0.2:
-        # Top 2 categories too close
-        return max(scores, key=scores.get), 0.5
+  Ambiguity check:
+    Sort scores descending. If gap between #1 and #2 < 0.2:
+      → return (best category, confidence=0.5)
 
-    best = max(scores, key=scores.get)
-    return best, scores[best]
-
-# Usage
-category, confidence = detect_category(guidelines, topic, explicit_category)
-
-if confidence < 0.7 and not explicit_category:
-    return {
-        "status": "category_ambiguous",
-        "detected": category,
-        "confidence": confidence,
-        "options": list(category_indicators.keys())
-    }
-else:
-    use_detected_category(category)
+  If confidence < 0.7 AND no explicit_category:
+    → Signal "category_ambiguous" with detected category, confidence, and options list
+    → Agent will use AskUserQuestion to clarify
+  Else:
+    → Proceed with detected category
 ```
 
 **Type detection with confidence:**
 
-```python
-def detect_type(guidelines: str, topic: str, explicit_type: str = None) -> tuple[str, float]:
-    """Detect knowledge entry type from content analysis."""
+```text
+SCORING LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    if explicit_type:
-        return explicit_type, 1.0
+detect_type(guidelines, topic, explicit_type):
+  If explicit_type provided: return (explicit_type, confidence=1.0)
 
-    combined = (guidelines + " " + topic).lower()
+  combined = (guidelines + " " + topic), lowercased
 
-    type_indicators = {
-        "rule": {
-            "strong": ["must not", "must never", "forbidden", "prohibited",
-                       "limit", "maximum", "minimum", "constraint", "enforce",
-                       "required", "mandatory", "not allowed"],
-            "weak": ["should not", "avoid", "restrict", "cap at", "ceiling"]
-        },
-        "pattern": {
-            "strong": ["pattern", "architecture", "design pattern", "approach",
-                       "error handling", "state management", "data flow"],
-            "weak": ["practice", "strategy", "technique", "method"]
-        },
-        "guide": {
-            "strong": ["how to", "step by step", "tutorial", "walkthrough",
-                       "getting started", "workflow", "instructions"],
-            "weak": ["migrate", "upgrade", "follow these steps"]
-        },
-        "documentation": {
-            "strong": ["documentation", "document this", "knowledge article",
-                       "describe how", "explanation of", "overview of",
-                       "save this documentation", "docs block"],
-            "weak": ["docs", "describe", "explain", "context", "background"]
-        },
-        "reference": {
-            "strong": ["reference", "specification", "api docs", "cheat sheet",
-                       "options", "parameters", "configuration reference"],
-            "weak": ["schema", "interface", "types", "lookup"]
-        },
-        "style": {
-            "strong": ["formatting", "indentation", "spacing", "prettier",
-                       "code style", "lint rule", "visual style"],
-            "weak": ["format", "indent", "whitespace", "semicolons"]
-        },
-        "environment": {
-            "strong": ["setup", "scaffold", "boilerplate", "environment",
-                       "infrastructure", "ci/cd", "pipeline", "deploy",
-                       "project initialization", "dev environment"],
-            "weak": ["configure", "install", "docker", "terraform",
-                      "github actions", ".env", "toolchain"]
-        },
-        "convention": {
-            "strong": ["convention", "naming", "camelCase", "PascalCase",
-                       "snake_case", "agreed", "team standard"],
-            "weak": ["prefer", "consistently", "standardize", "uniform"]
-        }
-    }
+  Type indicators (strong and weak for each type):
 
-    scores = {}
-    for entry_type, indicators in type_indicators.items():
-        strong_count = sum(1 for ind in indicators["strong"] if ind in combined)
-        weak_count = sum(1 for ind in indicators["weak"] if ind in combined)
-        score = (strong_count * 2 + weak_count) / (len(indicators["strong"]) + len(indicators["weak"]))
-        scores[entry_type] = score
+    rule:
+      strong: ["must not", "must never", "forbidden", "prohibited",
+               "limit", "maximum", "minimum", "constraint", "enforce",
+               "required", "mandatory", "not allowed"]
+      weak:   ["should not", "avoid", "restrict", "cap at", "ceiling"]
 
-    best_type = max(scores, key=scores.get)
-    confidence = scores[best_type]
+    pattern:
+      strong: ["pattern", "architecture", "design pattern", "approach",
+               "error handling", "state management", "data flow"]
+      weak:   ["practice", "strategy", "technique", "method"]
 
-    # If nothing detected clearly, default to convention
-    if confidence < 0.1:
-        return "convention", 0.5
+    guide:
+      strong: ["how to", "step by step", "tutorial", "walkthrough",
+               "getting started", "workflow", "instructions"]
+      weak:   ["migrate", "upgrade", "follow these steps"]
 
-    return best_type, min(1.0, confidence + 0.3)
+    documentation:
+      strong: ["documentation", "document this", "knowledge article",
+               "describe how", "explanation of", "overview of",
+               "save this documentation", "docs block"]
+      weak:   ["docs", "describe", "explain", "context", "background"]
 
-# Usage
-entry_type, confidence = detect_type(guidelines, topic, explicit_type)
+    reference:
+      strong: ["reference", "specification", "api docs", "cheat sheet",
+               "options", "parameters", "configuration reference"]
+      weak:   ["schema", "interface", "types", "lookup"]
 
-if confidence < 0.7 and not explicit_type:
-    return {
-        "status": "type_ambiguous",
-        "detected": entry_type,
-        "confidence": confidence,
-        "options": ["convention", "rule", "pattern", "guide", "documentation", "reference", "style", "environment"]
-    }
-else:
-    use_detected_type(entry_type)
+    style:
+      strong: ["formatting", "indentation", "spacing", "prettier",
+               "code style", "lint rule", "visual style"]
+      weak:   ["format", "indent", "whitespace", "semicolons"]
+
+    environment:
+      strong: ["setup", "scaffold", "boilerplate", "environment",
+               "infrastructure", "ci/cd", "pipeline", "deploy",
+               "project initialization", "dev environment"]
+      weak:   ["configure", "install", "docker", "terraform",
+               "github actions", ".env", "toolchain"]
+
+    convention:
+      strong: ["convention", "naming", "camelCase", "PascalCase",
+               "snake_case", "agreed", "team standard"]
+      weak:   ["prefer", "consistently", "standardize", "uniform"]
+
+  Formula: score = (strong_count * 2 + weak_count) / (total_strong + total_weak)
+
+  best_type = type with highest score
+  confidence = that score
+
+  If confidence < 0.1: return ("convention", 0.5)  — default fallback
+  Otherwise: return (best_type, min(1.0, confidence + 0.3))
+
+  If final confidence < 0.7 AND no explicit_type:
+    → Signal "type_ambiguous" with detected type, confidence, and options:
+      ["convention", "rule", "pattern", "guide", "documentation", "reference", "style", "environment"]
+    → Agent will use AskUserQuestion to clarify
+  Else:
+    → Proceed with detected type
 ```
 
 **Tags:**
@@ -485,175 +420,88 @@ Validate format before writing:
 
 Generate path from metadata:
 
-```python
-scope = metadata["scope"]
-category = metadata["category"]
-name = convert_to_kebab_case(title)
-output_path = f".kb/{scope}/{category}/{name}.md"
-```
+Construct the output path from metadata:
+- Pattern: `.kb/{scope}/{category}/{kebab-case-title}.md`
+- Convert the title to kebab-case for the filename (e.g., "Function Naming" → `function-naming`)
 
 **Check for existing knowledge entry:**
 
-```python
-if file_exists(output_path):
-    existing_content = read_file(output_path)
-    existing_version = extract_version(existing_content)
+**Check if file already exists:** Use **Glob** or **Read** (handling errors for missing files) to check if `output_path` already exists.
 
-    # Analyze user intent
-    intent = analyze_update_intent(guidelines)
+**If file exists:**
+1. Use **Read** to get existing content
+2. Extract current version from YAML frontmatter
+3. Analyze user intent using the intent analysis logic below
+4. Determine update strategy and version increment:
 
-    if intent == "append_rules":
-        strategy = "append"
-        increment = "minor"
+```text
+DECISION LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    elif intent == "update_values":
-        strategy = "update_fields"
-        increment = "minor"
+  intent → strategy mapping:
+    "append_rules"    → strategy="append",       increment="minor"
+    "update_values"   → strategy="update_fields", increment="minor"
+    "rewrite_section" → strategy="rewrite",       increment="minor" (or "major" if Rules/Format section)
+    "full_overwrite"  → strategy="overwrite",     increment="major"
+    "ambiguous"       → signal "update_confirmation_needed" to agent for user clarification
 
-    elif intent == "rewrite_section":
-        strategy = "rewrite"
-        increment = "minor"  # or "major" if Rules/Format section
-
-    elif intent == "full_overwrite":
-        strategy = "overwrite"
-        increment = "major"
-
-    else:  # ambiguous
-        # Ask user for clarification
-        return {"status": "update_confirmation_needed", ...}
-
-    new_version = increment_version(existing_version, increment)
-
-    return {
-        "status": "update_ready",
-        "strategy": strategy,
-        "current_version": existing_version,
-        "new_version": new_version,
-        "path": output_path,
-        "requires_confirmation": increment == "major"
-    }
-
-else:
-    # New knowledge entry
-    return {"status": "create_new", "path": output_path, "version": "1.0"}
+  If increment is "major": requires_confirmation = true (agent must confirm with user)
 ```
+
+**If file does NOT exist:** Create new entry with version "1.0".
 
 **Intent analysis patterns:**
 
-```python
-def analyze_update_intent(guidelines: str) -> str:
-    g = guidelines.lower()
+```text
+INTENT ANALYSIS (reference only — apply mentally, do NOT execute as code):
 
-    # Order matters - most specific first
-    overwrite = ["completely rewrite", "полностью переписать"]
-    rewrite = ["improve examples", "enhance examples", "улучши примеры"]
-    append = ["add rule", "добавь правило", "include also", "ещё один"]
-    update = ["change", "update", "increase", "decrease", "изменить", "увеличить"]
+Check guidelines (case-insensitive) for these phrases in ORDER (most specific first):
 
-    if any(p in g for p in overwrite):
-        return "full_overwrite"
-    elif any(p in g for p in rewrite):
-        return "rewrite_section"
-    elif any(p in g for p in update):
-        return "update_values"
-    elif any(p in g for p in append):
-        return "append_rules"
-    else:
-        return "ambiguous"
+  1. full_overwrite — if contains: "completely rewrite", "полностью переписать"
+  2. rewrite_section — if contains: "improve examples", "enhance examples", "улучши примеры"
+  3. update_values — if contains: "change", "update", "increase", "decrease", "изменить", "увеличить"
+  4. append_rules — if contains: "add rule", "добавь правило", "include also", "ещё один"
+  5. If none matched → "ambiguous"
 ```
 
 ### Step 9: Execute File Operation
 
 **For NEW conventions:**
 
-```python
-os.makedirs(os.path.dirname(output_path), exist_ok=True)
-write_file(output_path, yaml_frontmatter + "\n\n" + content_sections)
-```
+1. Use **Bash** to create the directory structure: `mkdir -p` followed by the directory portion of the output path
+2. Use **Write** tool to save the complete file (YAML frontmatter + blank line + content sections) to the output path
 
 **For UPDATES:**
 
-```python
-def execute_update(strategy, output_path, existing, new_content, new_version):
+**Execute update based on strategy:**
 
-    if strategy == "append":
-        # Add new rules to Rules section
-        sections = parse_markdown_sections(existing)
-        new_rules = new_content["rules"]
-        sections["Rules"].extend(new_rules)
-        sections["yaml"]["version"] = new_version
-        updated = rebuild_markdown(sections)
-        write_file(output_path, updated)
-
-    elif strategy == "update_fields":
-        # Replace specific values in Format section
-        updated = existing
-        for field, new_value in new_content["updates"].items():
-            updated = replace_field_value(updated, field, new_value)
-        updated = update_yaml_field(updated, "version", new_version)
-        write_file(output_path, updated)
-
-    elif strategy == "rewrite":
-        # Replace specific section(s)
-        sections = parse_markdown_sections(existing)
-        target = new_content["target_section"]
-        sections[target] = new_content["new_section_content"]
-        sections["yaml"]["version"] = new_version
-        updated = rebuild_markdown(sections)
-        write_file(output_path, updated)
-
-    elif strategy == "overwrite":
-        # Complete replacement
-        write_file(output_path, new_content["complete_file"])
-```
+- **append**: Use **Read** to get existing file. Find the Rules section (## Rules). Add the new rules at the end of that section. Update version in YAML frontmatter. Use **Write** to save.
+- **update_fields**: Use **Read** to get existing file. Replace specific field values in the Format section. Update version in YAML frontmatter. Use **Write** to save.
+- **rewrite**: Use **Read** to get existing file. Replace the target section entirely with new content. Update version in YAML frontmatter. Use **Write** to save.
+- **overwrite**: Use **Write** to save the complete new content, replacing the file entirely.
 
 **Version increment logic:**
 
-```python
-def increment_version(current: str, increment_type: str) -> str:
-    major, minor = map(int, current.split('.'))
+```text
+VERSION INCREMENT (reference only — apply mentally, do NOT execute as code):
 
-    if increment_type == "major":
-        return f"{major + 1}.0"
-    else:  # minor
-        return f"{major}.{minor + 1}"
+  Parse "major.minor" from current version string
+  If increment_type is "major": return "{major+1}.0"
+  If increment_type is "minor": return "{major}.{minor+1}"
 ```
 
 **Helper functions:**
 
-```python
-def parse_markdown_sections(content: str) -> dict:
-    """Parse markdown into {yaml, section_name: [lines]} dict."""
-    sections = {}
+**How to parse markdown into sections:**
+1. Extract YAML frontmatter: find content between the first `---` and second `---`
+2. Parse the YAML fields mentally (type, version, scope, category, tags)
+3. Split remaining content by `## ` headings
+4. Each heading becomes a section name; lines until the next heading become the section content
+5. Store as a mental map of `{section_name: content_lines}`
 
-    # Extract YAML
-    yaml_match = re.match(r'^---\n(.*?)\n---\n', content, re.DOTALL)
-    sections["yaml"] = yaml.safe_load(yaml_match.group(1))
-
-    # Parse sections by ## headers
-    current = None
-    for line in content[yaml_match.end():].split('\n'):
-        if line.startswith('## '):
-            current = line[3:].strip()
-            sections[current] = []
-        elif current:
-            sections[current].append(line)
-
-    return sections
-
-def rebuild_markdown(sections: dict) -> str:
-    """Rebuild markdown from sections dict."""
-    yaml_str = yaml.dump(sections["yaml"], default_flow_style=False)
-    result = f"---\n{yaml_str}---\n\n"
-
-    for section, lines in sections.items():
-        if section == "yaml":
-            continue
-        result += f"## {section}\n\n"
-        result += '\n'.join(lines) + "\n\n"
-
-    return result
-```
+**How to rebuild markdown from sections:**
+1. Format YAML frontmatter between `---` markers
+2. For each section in order: write `## {section_name}` followed by its content lines
+3. Separate sections with blank lines
 
 ### Step 10: Validate
 
@@ -696,76 +544,27 @@ Run post-write validation checks:
 
 Evaluate the created knowledge entry using the knowledge-evaluate skill with text-based invocation:
 
-```python
-try:
-    # Invoke quality evaluation skill in fast mode with text-based prompt
-    prompt = f"""Evaluate knowledge entry quality for file: {output_path}
-Mode: fast"""
+Invoke the **knowledge-evaluate** skill via **Task** tool:
+- Description: "Evaluate knowledge entry quality"
+- Prompt: `"Evaluate knowledge entry quality for file: {output_path}\nMode: fast"`
 
-    result_text = invoke_skill(skill="knowledge-evaluate", prompt=prompt)
+Parse the returned text to extract scores. Expected format:
+`Quality: X.X/10 (Clarity: N, Format: N, Structure: N, Completeness: N, Efficiency: N)`
 
-    # Parse text output (no JSON deserialization!)
-    # Expected format: "Quality: 8.4/10 (Clarity: 8, Format: 9, Structure: 9, Completeness: 8, Efficiency: 8)"
-    match = re.search(
-        r'Quality: ([\d.]+)/10 \(Clarity: (\d+), Format: (\d+), Structure: (\d+), Completeness: (\d+), Efficiency: (\d+)\)',
-        result_text
-    )
+```text
+RESULT HANDLING (reference only — apply mentally, do NOT execute as code):
 
-    if match:
-        overall_score = float(match.group(1))
-        scores = {
-            'clarity': int(match.group(2)),
-            'format': int(match.group(3)),
-            'structure': int(match.group(4)),
-            'completeness': int(match.group(5)),
-            'efficiency': int(match.group(6))
-        }
+  If evaluation text matches the expected format:
+    Extract overall_score and individual scores (clarity, format, structure, completeness, efficiency)
 
-        quality_summary = result_text.strip()  # Use formatted text directly
+    If overall_score < 7.0:
+      Add warning: "⚠ Quality below target. Run /knowledge-report for detailed analysis."
 
-        # Store in result
-        result = {
-            "status": "success",
-            "path": output_path,
-            "version": version,
-            "tier": tier,
-            "line_count": line_count,
-            "sections": sections_count,
-            "examples": examples_count,
-            "quality": quality_summary,
-            "quality_score": overall_score,
-            "quality_scores": scores,
-            "validation": validation_result
-        }
+  If evaluation fails or format doesn't match:
+    Continue without quality metrics — do NOT fail the knowledge entry creation
+    Set quality to "Evaluation skipped"
 
-        # Add warning if quality is low
-        if overall_score < 7.0:
-            result["quality_warning"] = (
-                "⚠ Quality below target. Run /knowledge-report for detailed analysis."
-            )
-
-        return result
-
-    else:
-        # Couldn't parse result - continue without quality metrics
-        log_warning(f"Quality evaluation format error: {result_text}")
-
-except Exception as e:
-    # Don't fail knowledge entry creation if evaluation fails
-    log_warning(f"Quality evaluation skipped: {str(e)}")
-
-# Return result without quality metrics if evaluation failed
-return {
-    "status": "success",
-    "path": output_path,
-    "version": version,
-    "tier": tier,
-    "line_count": line_count,
-    "sections": sections_count,
-    "examples": examples_count,
-    "quality": "Evaluation skipped",
-    "validation": validation_result
-}
+  Quality evaluation is NON-BLOCKING — knowledge entry creation always succeeds
 ```
 
 **Important Notes**:
@@ -857,6 +656,7 @@ Use Read tool to access these files when:
 - Use **Read** for reading existing conventions/configs
 - Use **Write** for creating knowledge entrys
 - Use **Bash** only for directory creation (mkdir -p)
+- **NEVER** create Python scripts (.py files) — all logic must use built-in tools above
 
 **Error handling:**
 - Catch file write errors and report clearly

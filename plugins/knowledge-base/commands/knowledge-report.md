@@ -4,6 +4,13 @@ description: Evaluate knowledge entry quality with detailed analysis and recomme
 argument-hint: "[file-path or entry-name]"
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Quality Report Command
 
 Generate comprehensive quality evaluation reports for knowledge entries.
@@ -30,66 +37,21 @@ Generate comprehensive quality evaluation reports for knowledge entries.
 
 ### Step 1: Parse Arguments
 
-```python
-def parse_arguments(args: str) -> dict:
-    """Parse command arguments."""
+Parse the command arguments as follows:
 
-    if not args or args.strip() == '':
-        # No arguments - find most recent knowledge entry
-        return {
-            "mode": "most_recent"
-        }
-
-    # Clean input
-    file_path = args.strip()
-
-    # Remove quotes if present
-    file_path = file_path.strip('"\'')
-
-    return {
-        "mode": "explicit",
-        "file_path": file_path
-    }
-```
+- If no arguments are provided (empty or whitespace only), set mode to `"most_recent"` to find the most recently modified knowledge entry
+- Otherwise, trim whitespace and remove surrounding quotes (single or double) from the input to get the file path, and set mode to `"explicit"`
 
 ### Step 2: Resolve File Path
 
-```python
-def resolve_file_path(mode: str, file_path: str = None) -> str:
-    """Resolve file path based on mode."""
+Resolve the file path based on mode:
 
-    if mode == "most_recent":
-        # Find most recently modified knowledge entry
-        knowledge entrys = Glob(pattern="**/*.md", path=".knowledge entrys")
-
-        if not knowledge entrys:
-            return None
-
-        # Get most recent
-        most_recent = max(knowledge entrys, key=lambda f: os.path.getmtime(f))
-        return most_recent
-
-    else:
-        # Explicit path provided - will be resolved by evaluator agent
-        return file_path
-```
+- **most_recent mode**: Use **Glob** with pattern `**/*.md` in the `.kb` directory. Glob returns files sorted by modification time, so take the first result as the most recently modified entry. If no files are found, report that no knowledge entries exist.
+- **explicit mode**: Pass the provided file path directly to the evaluator agent (it handles its own path resolution).
 
 ### Step 3: Invoke Convention Evaluator Agent
 
-```python
-def execute_evaluation(file_path: str):
-    """Invoke evaluator agent for deep analysis."""
-
-    # Invoke knowledge-evaluator agent
-    result = invoke_agent(
-        agent="knowledge-evaluator",
-        params={
-            "file_path": file_path
-        }
-    )
-
-    return result
-```
+Use the **Task** tool to delegate to the `knowledge-evaluator` agent, passing the resolved file path. The agent performs deep analysis and returns a formatted report.
 
 ### Step 4: Display Results
 

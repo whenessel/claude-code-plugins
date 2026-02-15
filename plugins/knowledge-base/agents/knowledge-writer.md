@@ -15,6 +15,13 @@ skills:
   - knowledge-evaluate
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Writer Agent
 
 You are a specialized agent for creating standardized knowledge entries.
@@ -53,65 +60,26 @@ You are a specialized agent for creating standardized knowledge entries.
 
 3.5. **Handle directory input** (if source is directory):
    - Use Glob to find all .md files:
-     ```python
-     files = Glob(pattern="**/*.md", path=directory_path)
-     ```
+     Use **Glob** with pattern `**/*.md` in the directory path to find all markdown files.
    - Filter files:
-     ```python
-     # Exclude README files and hidden files
-     filtered = [f for f in files
-                 if not f.lower().endswith('readme.md')
-                 and not '/.' in f
-                 and not f.startswith('.')]
-     ```
+     Exclude files from the list that end with `readme.md` (case-insensitive), contain `/.` in the path (hidden directories), or start with `.` (hidden files).
    - Track results:
-     ```python
-     results = {
-       "success": [],
-       "failed": [],
-       "skipped": []
-     }
+     ```yaml
+     results:
+       success: []
+       failed: []
+       skipped: []
      ```
    - FOR EACH file in filtered:
-     ```python
-     try:
-         # Read file
-         content = Read(file_path)
+     For each filtered file, perform the following steps:
 
-         # Invoke skill
-         result = invoke_draft_convention_skill({
-             "guidelines": content,
-             "explicit_type": explicit_type,
-             "explicit_scope": explicit_scope,
-             "explicit_category": explicit_category
-         })
-
-         # Handle result
-         if result.status == "success":
-             results["success"].append({
-                 "file": file_path,
-                 "output": result.path,
-                 "version": result.version
-             })
-         elif result.status in ["scope_ambiguous", "category_ambiguous", "type_ambiguous"]:
-             # Skip ambiguous files in batch mode, log warning
-             results["skipped"].append({
-                 "file": file_path,
-                 "reason": "Ambiguous type/scope/category"
-             })
-         else:
-             results["failed"].append({
-                 "file": file_path,
-                 "error": result.error
-             })
-
-     except Exception as e:
-         results["failed"].append({
-             "file": file_path,
-             "error": str(e)
-         })
-         # Continue to next file
-     ```
+     1. Use **Read** to load the file content
+     2. Use the **Task** tool to delegate to the `knowledge-draft` skill, passing the file content as guidelines along with any explicit type, scope, and category
+     3. Handle the result:
+        - **Success**: Record the file path, output path, and version in the success list
+        - **Ambiguous** (scope, category, or type ambiguous): In batch mode, skip the file and record it in the skipped list with reason "Ambiguous type/scope/category"
+        - **Failure**: Record the file path and error in the failed list
+     4. If any error occurs during processing, record it in the failed list and continue to the next file (do not stop the batch)
    - Show aggregate results:
      ```
      ✓ Batch processing complete

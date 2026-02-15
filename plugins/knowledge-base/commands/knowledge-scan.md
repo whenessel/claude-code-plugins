@@ -4,6 +4,13 @@ description: Scan codebase to discover and generate knowledge entries from exist
 argument-hint: "[path] [--auto] [--scope SCOPE] [--min-confidence N] | generate <ids>"
 ---
 
+> **EXECUTION CONSTRAINT**: All code blocks below are pseudocode for reference only.
+> - **NEVER** create or execute `.py` scripts
+> - **NEVER** use Bash to run `python` or `python3` commands
+> - Implement all logic using Claude's built-in tools: Read, Grep, Glob, Write, Edit, Bash, Task
+> - Parse YAML/JSON content mentally from Read tool output — do NOT use Python yaml/json libraries
+> - `invoke_skill()` / `invoke_agent()` in pseudocode = use **Task** tool with appropriate subagent_type
+
 # Knowledge Scan Command
 
 Analyze project codebase to discover de-facto conventions and generate knowledge entries.
@@ -31,112 +38,47 @@ Analyze project codebase to discover de-facto conventions and generate knowledge
 
 ### Parse Arguments
 
-```python
-def parse_arguments(args: list[str]) -> dict:
-    """Parse command arguments."""
+```text
+ARGUMENT PARSING LOGIC (reference only — apply mentally, do NOT execute as code):
 
-    result = {
-        "mode": "discover",      # discover | generate
-        "path": None,            # optional path filter
-        "auto": False,           # --auto flag
-        "scope": None,           # --scope filter
-        "min_confidence": 60,    # --min-confidence threshold
-        "generate_ids": None     # ids for generate mode
-    }
+Default values:
+  mode: "discover"
+  path: null
+  auto: false
+  scope: null
+  min_confidence: 60
+  generate_ids: null
 
-    # Check for generate subcommand
-    if args and args[0] == "generate":
-        result["mode"] = "generate"
-        if len(args) > 1:
-            target = args[1].strip()
-            if target == "all":
-                result["generate_ids"] = "all"
-            elif target == "high":
-                result["generate_ids"] = "high"  # high-confidence only
-            else:
-                # Parse comma-separated IDs: "1,2,5"
-                try:
-                    result["generate_ids"] = [
-                        int(x.strip()) for x in target.split(",")
-                    ]
-                except ValueError:
-                    return {"error": f"Invalid IDs: {target}. Use numbers like: 1,2,5"}
-        else:
-            return {"error": "Missing IDs. Usage: /knowledge-scan generate 1,2,5 | all | high"}
-        return result
+GENERATE SUBCOMMAND:
+  If first argument is "generate":
+    mode = "generate"
+    Second argument determines generate_ids:
+      "all"   → generate_ids = "all"
+      "high"  → generate_ids = "high" (high-confidence only)
+      "1,2,5" → parse as comma-separated integers; error if non-numeric
+    If no second argument → error: "Missing IDs. Usage: /knowledge-scan generate 1,2,5 | all | high"
 
-    # Parse flags and positional args
-    i = 0
-    while i < len(args):
-        arg = args[i]
-
-        if arg == "--auto":
-            result["auto"] = True
-
-        elif arg == "--scope" and i + 1 < len(args):
-            i += 1
-            result["scope"] = args[i]
-
-        elif arg == "--min-confidence" and i + 1 < len(args):
-            i += 1
-            try:
-                result["min_confidence"] = int(args[i])
-            except ValueError:
-                return {"error": f"Invalid confidence value: {args[i]}"}
-
-        elif not arg.startswith("--"):
-            # Positional argument = path
-            result["path"] = arg
-
-        else:
-            return {"error": f"Unknown flag: {arg}"}
-
-        i += 1
-
-    return result
+DISCOVERY FLAGS (iterate through args):
+  --auto                → auto = true
+  --scope <value>       → scope = next argument
+  --min-confidence <N>  → min_confidence = parse as integer; error if non-numeric
+  (no -- prefix)        → path = argument (positional)
+  (unknown flag)        → error: "Unknown flag: {arg}"
 ```
 
 ### Route by Mode
 
 #### Discovery Mode (default)
 
-```python
-if parsed["mode"] == "discover":
-    prompt = f"""
-    Scan codebase to discover conventions and patterns.
-
-    {"Scan path: " + parsed["path"] if parsed["path"] else "Scan path: project root"}
-    {"Scope filter: " + parsed["scope"] if parsed["scope"] else "Scope filter: auto-detect all"}
-    Minimum confidence: {parsed["min_confidence"]}%
-    Auto mode: {parsed["auto"]}
-    """
-
-    Task(
-        description="Discover codebase conventions",
-        prompt=prompt,
-        subagent_type="knowledge-scanner"
-    )
-```
+If mode is `"discover"`, use the **Task** tool to delegate to the `knowledge-scanner` agent with description "Discover codebase conventions". Include in the prompt:
+- Scan path (parsed path, or "project root" if none)
+- Scope filter (parsed scope, or "auto-detect all" if none)
+- Minimum confidence percentage
+- Auto mode flag
 
 #### Generate Mode (after discovery)
 
-```python
-if parsed["mode"] == "generate":
-    # Verify discovery plan exists in session
-    # (agent checks this via project memory)
-
-    prompt = f"""
-    Generate knowledge entries from discovery plan.
-
-    Target: {parsed["generate_ids"]}
-    """
-
-    Task(
-        description="Generate knowledge entries from scan plan",
-        prompt=prompt,
-        subagent_type="knowledge-scanner"
-    )
-```
+If mode is `"generate"`, use the **Task** tool to delegate to the `knowledge-scanner` agent with description "Generate knowledge entries from scan plan". Include the target IDs in the prompt. The agent verifies that a discovery plan exists in session via project memory.
 
 ### Error Handling
 
