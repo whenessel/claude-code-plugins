@@ -10,6 +10,11 @@
       "name": "knowledge-base",
       "source": "./plugins/knowledge-base",
       "description": "Build and improve a knowledge base of development guidelines including conventions, rules, styles, and practices with AI-driven research and validation"
+    },
+    {
+      "name": "toolkit",
+      "source": "./plugins/toolkit",
+      "description": "A collection of tools and utilities for enhancing development workflows with Claude AI"
     }
   ]
 }
