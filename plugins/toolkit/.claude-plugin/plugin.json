@@ -1,0 +1,18 @@
+{
+  "name": "toolkit",
+  "version": "1.0.0",
+  "description": "Essential productivity utilities for Claude Code. Enhances workflow with intelligent task structuring, codebase analysis, and automated quality improvements.",
+  "author": {
+    "name": "Artem Demidenko"
+  },
+  "keywords": [
+    "utilities",
+    "productivity",
+    "automation",
+    "workflow",
+    "developer-tools",
+    "code-quality",
+    "analysis",
+    "planning"
+  ]
+}
