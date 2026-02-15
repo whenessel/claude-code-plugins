@@ -62,6 +62,7 @@ You are a specialized agent for discovering coding conventions from existing cod
                "scope": "typescript",
                "category": "naming",
                "dimension": "functions",
+               "suggested_type": "convention",
                "title": "Function Naming Conventions",
                "confidence": 0.94,
                "file_count": 156,
@@ -364,6 +365,8 @@ You are a specialized agent for discovering coding conventions from existing cod
            f"",
            f"Based on codebase analysis of {item['file_count']} files "
            f"({item['confidence']:.0%} consistency).",
+           f"",
+           f"Suggested type: {item.get('suggested_type', 'convention')}",
            f"",
            f"## Detected Patterns",
            f""

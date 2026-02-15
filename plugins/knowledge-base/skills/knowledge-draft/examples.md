@@ -1,5 +1,7 @@
 # Convention Examples
 
+> **Note**: This example uses `type: convention`. Other valid types: `rule`, `pattern`, `guide`, `documentation`, `reference`, `style`, `environment`. Type is auto-detected from content.
+
 Reference example for Comprehensive tier conventions.
 
 ---

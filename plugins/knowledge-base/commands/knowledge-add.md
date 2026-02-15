@@ -1,7 +1,7 @@
 ---
 name: knowledge-add
 description: Create a standardized knowledge entry from raw guidelines
-argument-hint: "[scope:X] [category:Y] <guidelines text, file, directory, or URL>"
+argument-hint: "[type:X] [scope:Y] [category:Z] <guidelines text, file, directory, or URL>"
 ---
 
 # Knowledge Add Command
@@ -12,7 +12,9 @@ Create a standardized knowledge entry in `.kb/` directory.
 
 ```bash
 /knowledge-add <guidelines>
+/knowledge-add type:rule scope:typescript Max file size: 800 lines
 /knowledge-add scope:typescript category:naming <guidelines>
+/knowledge-add type:environment Node.js project setup: npm init, eslint, prettier, husky
 /knowledge-add https://example.com/style-guide.md
 /knowledge-add ./docs/guidelines.md scope:react
 ```
@@ -72,11 +74,16 @@ Create a standardized knowledge entry in `.kb/` directory.
        content = Read(source_path)
    ```
 
-3. **Parse explicit scope/category**:
+3. **Parse explicit type/scope/category**:
    ```python
-   # Extract "scope:typescript" or "category:naming"
+   # Extract "type:rule", "scope:typescript" or "category:naming"
    for arg in remaining_args:
-       if match := re.match(r'scope:(\w+)', arg):
+       if match := re.match(r'type:(\w+)', arg):
+           explicit_type = match.group(1)
+           valid_types = ["convention", "rule", "pattern", "guide", "documentation", "reference", "style", "environment"]
+           if explicit_type not in valid_types:
+               error(f"Invalid type '{explicit_type}'. Valid: {', '.join(valid_types)}")
+       elif match := re.match(r'scope:(\w+)', arg):
            explicit_scope = match.group(1)
        elif match := re.match(r'category:(\w+)', arg):
            explicit_category = match.group(1)
@@ -104,6 +111,7 @@ if source_type == "directory":
     2. Create a convention from its guidelines
     3. Track results (success/failure)
 
+    {"Explicit type: " + explicit_type if explicit_type else ""}
     {"Explicit scope: " + explicit_scope if explicit_scope else ""}
     {"Explicit category: " + explicit_category if explicit_category else ""}
 
@@ -115,6 +123,7 @@ else:
 
     {guidelines if not content else content}
 
+    {"Explicit type: " + explicit_type if explicit_type else ""}
     {"Explicit scope: " + explicit_scope if explicit_scope else ""}
     {"Explicit category: " + explicit_category if explicit_category else ""}
     {"Source: " + source_path if source_path else ""}
@@ -133,14 +142,18 @@ Task(
 ```
 Show usage help:
 
-Usage: /knowledge-add [scope:X] [category:Y] <guidelines or file/URL>
+Usage: /knowledge-add [type:X] [scope:Y] [category:Z] <guidelines or file/URL>
 
 Options:
+  type:TYPE         Explicit type (convention, rule, pattern, guide, documentation, reference, style, environment)
   scope:SCOPE       Explicit scope (typescript, python, react, etc.)
   category:CAT      Explicit category (naming, rules, patterns, etc.)
 
 Examples:
   /knowledge-add TypeScript functions: camelCase, verb-based
+  /knowledge-add type:rule scope:typescript Max file size: 800 lines
+  /knowledge-add type:pattern Error handling best practices
+  /knowledge-add type:environment Node.js project setup: npm init, eslint, prettier, husky
   /knowledge-add scope:react category:patterns Hooks naming: start with use
   /knowledge-add https://github.com/airbnb/javascript/blob/master/README.md
   /knowledge-add ./docs/guidelines.md scope:typescript
@@ -228,40 +241,45 @@ After agent completes:
 /knowledge-add TypeScript async functions must have try-catch blocks
 ```
 
-**Example 2: With explicit scope/category**
+**Example 2: With explicit type**
+```bash
+/knowledge-add type:rule scope:typescript Max file size: 800 lines
+```
+
+**Example 3: With explicit scope/category**
 ```bash
 /knowledge-add scope:react category:patterns Hooks naming: start with use, camelCase
 ```
 
-**Example 3: From URL (auto-detected)**
+**Example 4: From URL (auto-detected)**
 ```bash
 /knowledge-add https://github.com/airbnb/javascript/blob/master/README.md
 ```
 
-**Example 4: From file (auto-detected)**
+**Example 5: From file (auto-detected)**
 ```bash
 /knowledge-add ./docs/api-guidelines.md scope:typescript
 ```
 
-**Example 5: Update existing convention**
+**Example 6: Update existing convention**
 ```bash
 /knowledge-add Add rule: functions should document thrown errors
 # Updates existing convention, version 1.0 → 1.1
 ```
 
-**Example 6: Codebase analysis (Russian trigger)**
+**Example 7: Codebase analysis (Russian trigger)**
 ```bash
 /knowledge-add Изучи стиль кода в TypeScript файлах и сформулируй конвенцию именования
 # Triggers codebase analysis
 ```
 
-**Example 7: Batch process directory**
+**Example 8: Batch process directory**
 ```bash
 /knowledge-add ./docs/guidelines/ scope:typescript
 # Processes all .md files in directory
 ```
 
-**Example 8: Directory with category**
+**Example 9: Directory with category**
 ```bash
 /knowledge-add ./docs/naming-conventions/ scope:react category:naming
 # All files use same scope and category

@@ -47,8 +47,8 @@ You are a specialized agent for creating standardized knowledge entries.
    - Validate: max 10k lines, no .. in path
    - Pass as guidelines to skill
 
-3. **Check for explicit scope/category:**
-   - Extract from args (scope:X category:Y)
+3. **Check for explicit type/scope/category:**
+   - Extract from args (type:X scope:Y category:Z)
    - Pass to skill as explicit metadata
 
 3.5. **Handle directory input** (if source is directory):
@@ -81,6 +81,7 @@ You are a specialized agent for creating standardized knowledge entries.
          # Invoke skill
          result = invoke_draft_convention_skill({
              "guidelines": content,
+             "explicit_type": explicit_type,
              "explicit_scope": explicit_scope,
              "explicit_category": explicit_category
          })
@@ -92,11 +93,11 @@ You are a specialized agent for creating standardized knowledge entries.
                  "output": result.path,
                  "version": result.version
              })
-         elif result.status == "scope_ambiguous" or result.status == "category_ambiguous":
+         elif result.status in ["scope_ambiguous", "category_ambiguous", "type_ambiguous"]:
              # Skip ambiguous files in batch mode, log warning
              results["skipped"].append({
                  "file": file_path,
-                 "reason": "Ambiguous scope/category"
+                 "reason": "Ambiguous type/scope/category"
              })
          else:
              results["failed"].append({
@@ -121,7 +122,7 @@ You are a specialized agent for creating standardized knowledge entries.
        ...
 
      Skipped: 1 file
-       - ./docs/general-rules.md (ambiguous scope - run individually)
+       - ./docs/general-rules.md (ambiguous type/scope - run individually)
 
      Failed: 0 files
 
@@ -132,14 +133,34 @@ You are a specialized agent for creating standardized knowledge entries.
    ```json
    {
      "guidelines": <text or file content>,
+     "explicit_type": <if provided>,
      "explicit_scope": <if provided>,
      "explicit_category": <if provided>
    }
    ```
 
 5. **Handle insufficient confidence:**
-   - If skill returns scope/category confidence < 70%
+   - If skill returns type/scope/category confidence < 70%
    - Use AskUserQuestion to clarify
+
+   **For type ambiguity:**
+   ```
+   Question: What type of knowledge entry is this?
+
+   Detected "{topic}" could be:
+   - {detected_type} (auto-detected, {confidence}% confidence)
+   - ...
+
+   Options:
+   1. Convention — Naming/style agreement
+   2. Rule — Hard constraint or limit
+   3. Pattern — Code/design pattern
+   4. Guide — How-to or workflow
+   5. Documentation — Saved knowledge block
+   6. Reference — API/config reference
+   7. Style — Formatting rules
+   8. Environment — Setup, config, scaffolding
+   ```
 
    **For scope ambiguity:**
    ```

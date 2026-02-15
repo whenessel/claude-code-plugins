@@ -8,7 +8,7 @@ Every convention file must follow this structure:
 
 ```markdown
 ---
-type: convention
+type: convention  # or: rule, pattern, guide, documentation, reference, style, environment
 version: {major.minor}
 scope: {scope_identifier}
 category: {category_type}
@@ -31,7 +31,17 @@ tags: [{tag1}, {tag2}, {tag3}]
 
 ### Required Fields
 
-- **type**: Always `convention` (literal value)
+- **type**: Entry type, one of:
+  - `convention` — Naming/style agreements, team norms
+  - `rule` — Hard constraints, limits, prohibitions
+  - `pattern` — Code patterns, architectural approaches
+  - `guide` — How-to documentation, workflows
+  - `documentation` — Saved knowledge blocks, explanations
+  - `reference` — API specs, configuration descriptions
+  - `style` — Code formatting, visual preferences
+  - `environment` — Setup, configuration, scaffolding, infrastructure
+
+  Auto-detected from content. Default: `convention`
 - **version**: Semantic version `{major}.{minor}` (e.g., `1.0`, `1.2`, `2.0`)
 - **scope**: Language or framework identifier
 - **category**: Classification of convention type

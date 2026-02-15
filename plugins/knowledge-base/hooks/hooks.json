@@ -1,14 +1,14 @@
 {
-  "description": "Knowledge entry update notifications",
+  "description": "Knowledge entry update notifications and auto-review",
   "hooks": {
     "PostToolUse": [
       {
-        "matcher": "Write|Edit",
+        "matcher": "Write",
         "hooks": [
           {
-            "type": "command",
-            "command": "echo '✓ Knowledge entry updated. Run /knowledge-reindex to update catalog.'",
-            "description": "Notify about knowledge entry updates",
+            "type": "prompt",
+            "prompt": "File written to .kb/. Run quick Level 1 structural check on the written file using knowledge-review skill. If errors found, fix them silently. Show brief summary (max 3 lines). Then remind: Run /knowledge-reindex to update catalog.",
+            "description": "Auto-review and fix new entries",
             "condition": {
               "filePattern": ".kb/**/*.md",
               "excludePatterns": [

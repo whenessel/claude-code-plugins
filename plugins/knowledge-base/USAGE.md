@@ -625,6 +625,68 @@ cat .conventions/typescript/patterns/error-handling.md
 
 ---
 
+### Workflow 5: Review and Validation
+
+Validate existing entries and auto-fix structural issues:
+
+```bash
+# 1. Review all entries (report only)
+/knowledge-review
+
+# 2. Review specific directory
+/knowledge-review typescript/
+
+# 3. Auto-fix structural issues (Level 1)
+/knowledge-review --fix
+
+# 4. Review with AI-assisted fixes (Level 1 + Level 2)
+/knowledge-review typescript/ --fix-all
+
+# 5. Update catalog after fixes
+/knowledge-reindex
+```
+
+**Use when:**
+- Weekly quality checks
+- Before committing changes
+- After importing bulk entries
+- Catching structural issues early
+- Standardizing entry formats
+
+**Fix levels:**
+- **Level 1 (--fix)**: Auto-fix YAML, code tags, headings (no confirmation)
+- **Level 2 (--fix-all)**: Generate missing sections with AI (requires confirmation)
+- **Level 3**: Quality recommendations only (no modifications)
+
+**Example output:**
+```
+📋 Review: functions.md
+
+File: .kb/typescript/naming/functions.md
+Version: 1.0 | Tier: standard
+
+── Validation ──────────────────────────
+✓ YAML frontmatter: Valid
+✓ Required sections: All present
+⚠ Code blocks: 2 missing language tags → fixed
+✓ Heading hierarchy: Valid
+
+Fixes applied: 2
+- [code_block] line 45: added language tag "typescript"
+- [code_block] line 89: added language tag "typescript"
+
+── Quality: 8.4/10 (Excellent ⭐⭐⭐⭐) ──
+Clarity: 8 | Format: 9↑ | Structure: 9 | Completeness: 8
+
+── Recommendations ─────────────────────
+1. Add 1 example to Forbidden section → +0.5 pts
+2. Replace 'should' with 'must' in Rules 3,7 → +0.5 pts
+
+Potential: 9.4/10
+```
+
+---
+
 ## Convention Tiers Explained
 
 The plugin automatically selects the appropriate tier based on input complexity.

@@ -434,6 +434,267 @@ Research: codebase patterns included
 
 ---
 
+### Test 11: Review Single File (Report Only)
+
+**Objective**: Verify basic validation without modifications
+
+**Setup**:
+Create a test knowledge entry with intentional issues:
+```bash
+# Create entry with missing version field and untagged code block
+echo '---
+type: convention
+scope: typescript
+category: naming
+tags: [functions, naming]
+---
+
+# Test Functions
+
+## Format
+
+```
+function testFunc() {}
+```
+' > .kb/typescript/naming/test-functions.md
+```
+
+**Command**:
+```bash
+/knowledge-review test-functions.md
+```
+
+**Expected Behavior**:
+1. Finds the file in `.kb/` directory
+2. Runs Level 1 validation (structural checks)
+3. Identifies issues: missing version field, untagged code block
+4. Reports issues without modifying file (mode: none)
+5. Runs Level 3 quality evaluation
+
+**Expected Output**:
+```
+📋 Review: test-functions.md
+
+File: .kb/typescript/naming/test-functions.md
+Version: — | Tier: simple
+
+── Validation ──────────────────────────
+⚠ YAML frontmatter: Missing field 'version'
+✓ Required sections: All present
+⚠ Code blocks: 1 missing language tag
+✓ Heading hierarchy: Valid
+
+Fixes applied: 0
+
+── Quality: 6.5/10 (Adequate ⭐⭐) ──
+
+── Recommendations ─────────────────────
+1. Add version field to YAML frontmatter
+2. Add language tag to code block at line 10
+
+Run /knowledge-review test-functions.md --fix to apply fixes
+```
+
+**Validation**:
+- [ ] File NOT modified (report-only mode)
+- [ ] Issues correctly identified
+- [ ] Quality score calculated
+- [ ] Recommendations provided
+
+---
+
+### Test 12: Review with Auto-Fix (Level 1)
+
+**Objective**: Verify safe auto-corrections for structural issues
+
+**Command**:
+```bash
+/knowledge-review test-functions.md --fix
+```
+
+**Expected Behavior**:
+1. Detects same issues as Test 11
+2. Automatically applies Level 1 fixes:
+   - Adds `version: 1.0` to YAML frontmatter
+   - Detects code is TypeScript, adds ` ```typescript` tag
+3. Reports fixes applied
+4. No user confirmation required (safe transformations)
+
+**Expected Output**:
+```
+📋 Review: test-functions.md
+
+File: .kb/typescript/naming/test-functions.md
+Version: 1.0 | Tier: simple
+
+── Validation ──────────────────────────
+✓ YAML frontmatter: Valid
+✓ Required sections: All present
+⚠ Code blocks: 1 missing language tag → fixed
+✓ Heading hierarchy: Valid
+
+Fixes applied: 2
+- [yaml] Added field 'version: 1.0'
+- [code_block] line 10: added language tag "typescript"
+
+── Quality: 7.5/10 (Good ⭐⭐⭐) ──
+```
+
+**Validation**:
+- [ ] File IS modified
+- [ ] Version field added to YAML
+- [ ] Code block has `typescript` tag
+- [ ] Fixes logged in output
+- [ ] Quality score improved
+
+**Check File**:
+```bash
+head -15 .kb/typescript/naming/test-functions.md
+# Should now have version: 1.0 and ```typescript
+```
+
+---
+
+### Test 13: Batch Review Directory
+
+**Objective**: Verify batch processing with continue-on-failure
+
+**Setup**:
+Create multiple test entries with various issues:
+```bash
+# Entry 1: missing tags field
+echo '---
+type: convention
+version: 1.0
+scope: typescript
+category: rules
+---
+# Test Rule' > .kb/typescript/rules/test-rule.md
+
+# Entry 2: invalid version format
+echo '---
+type: convention
+version: 1
+scope: typescript
+category: rules
+tags: [test]
+---
+# Another Rule' > .kb/typescript/rules/another-rule.md
+```
+
+**Command**:
+```bash
+/knowledge-review typescript/ --fix
+```
+
+**Expected Behavior**:
+1. Globs all `.md` files in `typescript/` (exclude READMEs)
+2. Processes each file independently
+3. Continues on failure (if one file has error, continues to next)
+4. Applies Level 1 fixes to all files
+5. Aggregates statistics
+
+**Expected Output**:
+```
+📋 Batch Review: .kb/typescript/
+
+Scanned: 3 files | Fixes: 3 across 2 files | Avg Quality: 7.4/10
+
+── Issues ──────────────────────────────
+❌ Critical (auto-fixed): 3
+  • 1× missing field: tags
+  • 1× invalid version format (1 → 1.0)
+  • 1× code block missing language tag
+
+── Files Requiring Attention ───────────
+  7.0/10  rules/test-rule.md          (1 issue fixed)
+  7.5/10  rules/another-rule.md       (1 issue fixed)
+
+── Next Steps ──────────────────────────
+✓ All critical issues fixed automatically
+⚠ Run /knowledge-reindex to update catalog
+```
+
+**Validation**:
+- [ ] All files processed
+- [ ] Statistics aggregated correctly
+- [ ] Fixes applied to multiple files
+- [ ] Files sorted by quality (worst first)
+- [ ] No crash on errors
+
+---
+
+### Test 14: Auto-Review Hook Trigger
+
+**Objective**: Verify PostToolUse hook auto-reviews new entries
+
+**Command**:
+```bash
+/knowledge-add TypeScript constants use UPPER_SNAKE_CASE
+```
+
+**Expected Behavior**:
+1. knowledge-writer creates new entry via Write tool
+2. PostToolUse hook triggers on Write
+3. Hook runs Level 1 validation automatically
+4. Silently fixes any structural issues
+5. Shows brief summary (max 3 lines)
+6. Reminds to run `/knowledge-reindex`
+
+**Expected Output**:
+```
+✓ Knowledge entry created: .kb/typescript/naming/constants.md
+
+Tier: simple
+Lines: ~45
+Version: 1.0
+
+✓ Auto-review: 0 issues found
+Run /knowledge-reindex to update catalog.
+```
+
+**If issues are auto-fixed**:
+```
+✓ Knowledge entry created: .kb/typescript/naming/constants.md
+
+Tier: simple
+Lines: ~45
+Version: 1.0
+
+✓ Auto-review: 1 fix applied (code_block tag)
+Run /knowledge-reindex to update catalog.
+```
+
+**Validation**:
+- [ ] Hook triggers automatically after Write
+- [ ] Level 1 fixes applied silently
+- [ ] Brief output (not verbose)
+- [ ] Reminder to reindex shown
+- [ ] No recursion (hook doesn't trigger on Edit during fix)
+
+**Check Hook Behavior**:
+```bash
+# Create entry with missing code tag
+echo '---
+type: convention
+version: 1.0
+scope: python
+category: naming
+tags: [variables]
+---
+# Variables
+
+```
+x = 1
+```' > .kb/python/naming/variables.md
+
+# Hook should auto-fix the code block tag
+# Check if tag was added
+grep '```python' .kb/python/naming/variables.md
+```
+
+---
+
 ## Validation Checklist
 
 After running all tests, verify:
@@ -464,9 +725,21 @@ After running all tests, verify:
 - [ ] `/rebuild-index` generates valid catalog
 
 ### Hooks
-- [ ] PostToolUse notification triggers correctly
-- [ ] Only triggers for convention file changes
-- [ ] Message is clear and actionable
+- [ ] PostToolUse auto-review triggers on Write
+- [ ] Only triggers for knowledge entry file changes
+- [ ] Level 1 fixes applied automatically
+- [ ] No recursion (doesn't trigger on Edit during fixes)
+- [ ] Brief summary output (max 3 lines)
+
+### Review System
+- [ ] `/knowledge-review` reports issues without --fix flag
+- [ ] `/knowledge-review --fix` applies Level 1 auto-fixes
+- [ ] `/knowledge-review --fix-all` prompts for Level 2 confirmations
+- [ ] Batch processing continues on failure
+- [ ] Quality scores calculated correctly
+- [ ] Idempotent (running twice shows 0 fixes on second run)
+- [ ] Auto-review hook works after Write operations
+- [ ] `/knowledge-reindex --review` adds validation check
 
 ### Edge Cases
 - [ ] File conflicts handled gracefully
@@ -485,6 +758,9 @@ Expected performance:
 | Comprehensive convention | <15 seconds | Full research |
 | Rebuild index (10 files) | <2 seconds | Fast glob + parse |
 | Rebuild index (100 files) | <5 seconds | Should scale |
+| Review single file | <3 seconds | Includes quality evaluation |
+| Review batch (20 files) | <60 seconds | Level 1 + Level 3 fast mode |
+| Auto-review hook | <1 second | Level 1 only, silent fixes |
 
 ## Troubleshooting
 

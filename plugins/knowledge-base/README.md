@@ -13,8 +13,9 @@ Transform informal coding guidelines into structured, AI-friendly documentation 
 - 🎯 Three complexity tiers (simple, standard, comprehensive)
 - 🌍 Multi-language support (input in Russian/English, output in English)
 - 📊 Automatic indexing and cataloging
-- ✅ Built-in validation and quality evaluation
+- ✅ Three-level validation with auto-correction (structural, content, quality)
 - ⭐ Automatic quality scoring with detailed reports
+- 🔧 Auto-review hook for immediate validation after file creation
 
 ---
 
@@ -90,6 +91,18 @@ After creating conventions, rebuild the index:
 ```
 
 This generates `.kb/README.md` with organized listings of all conventions.
+
+### Review and Validate
+
+Check all entries for structural issues:
+
+```bash
+# Report only
+/knowledge-review
+
+# Auto-fix structural issues
+/knowledge-review --fix
+```
 
 ### Evaluate Quality
 
@@ -186,7 +199,7 @@ Rebuild the conventions catalog.
 
 **Syntax:**
 ```bash
-/knowledge-reindex
+/knowledge-reindex [--review]
 ```
 
 **What it does:**
@@ -195,6 +208,58 @@ Rebuild the conventions catalog.
 - Groups by scope and category
 - Generates `.kb/README.md`
 - Calculates statistics
+- **With --review:** Adds Level 1 validation check
+
+---
+
+### `/knowledge-review` - Validate Entries
+
+Review and validate knowledge base entries with optional auto-fixing.
+
+**Syntax:**
+```bash
+/knowledge-review [path] [--fix | --fix-all]
+```
+
+**Arguments:**
+- **path** (optional): Target for review
+  - Omit to review all entries
+  - Directory: `typescript/` or `.kb/typescript/`
+  - Filename: `functions.md` (searches `.kb/`)
+  - Full path: `.kb/typescript/naming/functions.md`
+
+**Fix modes:**
+- **None (default):** Report issues without modifying files
+- **--fix:** Apply Level 1 auto-fixes (YAML, code tags, headings)
+- **--fix-all:** Apply Level 1 + Level 2 AI-assisted fixes (with confirmation)
+
+**Examples:**
+```bash
+# Review all entries (report only)
+/knowledge-review
+
+# Review specific directory
+/knowledge-review typescript/
+
+# Review with auto-fixes
+/knowledge-review --fix
+
+# Review directory with all fixes
+/knowledge-review typescript/ --fix-all
+```
+
+**Validation levels:**
+- **Level 1 - Structural:** Auto-fix YAML, code blocks, headings (safe)
+- **Level 2 - Content:** AI-assisted section generation (requires confirmation)
+- **Level 3 - Quality:** Recommendations only (no modifications)
+
+**Features:**
+- Three-level validation system
+- Safe auto-corrections for structural issues
+- AI-assisted content generation for missing sections
+- Quality scoring with recommendations
+- Batch processing with continue-on-failure
+- Idempotent (safe to run multiple times)
 
 ---
 

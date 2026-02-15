@@ -1,11 +1,19 @@
 ---
 name: knowledge-reindex
 description: Rebuild .kb/ index (README.md catalog)
+argument-hint: "[--review]"
 ---
 
 # Rebuild Knowledge Base Index
 
 Scan all knowledge entries and update README.md catalog with organized listings.
+
+## Usage
+
+```bash
+/knowledge-reindex           # Standard reindex only
+/knowledge-reindex --review  # Reindex + Level 1 validation report
+```
 
 ## Purpose
 
@@ -520,9 +528,74 @@ Summary:
 - README files generated: 4 (1 root + 1 scope + 2 category)
 ```
 
+## Review Mode (--review flag)
+
+When invoked with `--review` flag, the command performs additional validation after reindexing:
+
+### Workflow Extension
+
+```
+/knowledge-reindex --review
+  ↓
+1. Scan + generate README files (standard behavior)
+  ↓
+2. Invoke knowledge-reviewer agent in report-only mode
+   Parameters: { path: "", fix_mode: "none" }
+  ↓
+3. Display summary after index:
+```
+
+### Example Output
+
+```
+Scanning knowledge entries directory...
+Found 17 knowledge entries
+
+Organizing by scope and category...
+- typescript: 17 knowledge entries (naming: 15, rules: 2)
+
+Generating category READMEs...
+✓ .kb/typescript/naming/README.md (15 knowledge entries)
+✓ .kb/typescript/rules/README.md (2 knowledge entries)
+
+Generating scope READMEs...
+✓ .kb/typescript/README.md (17 knowledge entries)
+
+Generating root README...
+✓ .kb/README.md (summary with links)
+
+📋 Quick Review (Level 1 validation):
+  ❌ 2 files have structural issues:
+    • python/naming/modules.md — missing field: tags
+    • react/patterns/hooks.md — invalid YAML syntax
+
+  Run /knowledge-review --fix to auto-fix
+
+Summary:
+- Total knowledge entries: 17
+- Scopes: 1
+- Categories: 2
+- README files generated: 4 (1 root + 1 scope + 2 category)
+```
+
+### Purpose
+
+Provides lightweight quality check during routine indexing without requiring separate command. Useful for:
+- **CI/CD pipelines**: Catch structural issues during automated builds
+- **Weekly maintenance**: Quick health check of entire knowledge base
+- **After batch imports**: Validate multiple new entries at once
+
+### Performance Impact
+
+- Standard reindex: ~1-2 seconds
+- With --review: +10-20 seconds (for 50+ entries)
+- Review uses Level 1 validation only (fast structural checks)
+- No auto-fixes applied (report-only mode)
+
 ## Notes
 
 - **Idempotent**: Can be run multiple times safely
 - **No confirmation**: Overwrites README.md without asking
 - **Fast operation**: Should complete in <2 seconds for 100s of knowledge entries
 - **Auto-discovery**: Automatically finds all `.md` files in directory structure
+- **Review mode**: Optional --review flag adds validation without modifying files

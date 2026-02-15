@@ -858,11 +858,45 @@ def assemble_plan(stack, dimension_results, min_confidence):
         # Get dimension definition
         dim_def = get_dimension_by_id(dim_id)
 
+        # Map dimension to suggested type
+        dimension_to_type = {
+            # Naming dimensions → convention
+            "functions": "convention",
+            "variables": "convention",
+            "components": "convention",
+            "classes": "convention",
+            "modules": "convention",
+            "files": "convention",
+
+            # Structural dimensions → pattern
+            "imports": "pattern",
+            "exports": "pattern",
+            "error-handling": "pattern",
+
+            # Documentation dimensions → style
+            "jsdoc": "style",
+            "docstrings": "style",
+
+            # State/architecture → pattern
+            "state-management": "pattern",
+            "hooks": "pattern",
+
+            # Environment/config dimensions → environment
+            "directories": "environment",
+            "project-structure": "environment",
+            "config-files": "environment",
+            "ci-cd": "environment",
+            "docker": "environment",
+            "toolchain": "environment"
+        }
+        suggested_type = dimension_to_type.get(dim_def["dimension"], "convention")
+
         discovered.append({
             "id": id_counter,
             "scope": dim_def["scope"],
             "category": dim_def["category"],
             "dimension": dim_def["dimension"],
+            "suggested_type": suggested_type,
             "title": dim_def["title"],
             "confidence": result["confidence"],
             "file_count": result["file_count"],

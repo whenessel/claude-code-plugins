@@ -107,7 +107,7 @@ try:
 
         Knowledge entry files must start with YAML frontmatter:
         ---
-        type: convention
+        type: convention  # Valid: convention, rule, pattern, guide, documentation, reference, style, environment
         version: X.Y
         ...
         ---

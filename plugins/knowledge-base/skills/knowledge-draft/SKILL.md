@@ -310,6 +310,94 @@ else:
     use_detected_category(category)
 ```
 
+**Type detection with confidence:**
+
+```python
+def detect_type(guidelines: str, topic: str, explicit_type: str = None) -> tuple[str, float]:
+    """Detect knowledge entry type from content analysis."""
+
+    if explicit_type:
+        return explicit_type, 1.0
+
+    combined = (guidelines + " " + topic).lower()
+
+    type_indicators = {
+        "rule": {
+            "strong": ["must not", "must never", "forbidden", "prohibited",
+                       "limit", "maximum", "minimum", "constraint", "enforce",
+                       "required", "mandatory", "not allowed"],
+            "weak": ["should not", "avoid", "restrict", "cap at", "ceiling"]
+        },
+        "pattern": {
+            "strong": ["pattern", "architecture", "design pattern", "approach",
+                       "error handling", "state management", "data flow"],
+            "weak": ["practice", "strategy", "technique", "method"]
+        },
+        "guide": {
+            "strong": ["how to", "step by step", "tutorial", "walkthrough",
+                       "getting started", "workflow", "instructions"],
+            "weak": ["migrate", "upgrade", "follow these steps"]
+        },
+        "documentation": {
+            "strong": ["documentation", "document this", "knowledge article",
+                       "describe how", "explanation of", "overview of",
+                       "save this documentation", "docs block"],
+            "weak": ["docs", "describe", "explain", "context", "background"]
+        },
+        "reference": {
+            "strong": ["reference", "specification", "api docs", "cheat sheet",
+                       "options", "parameters", "configuration reference"],
+            "weak": ["schema", "interface", "types", "lookup"]
+        },
+        "style": {
+            "strong": ["formatting", "indentation", "spacing", "prettier",
+                       "code style", "lint rule", "visual style"],
+            "weak": ["format", "indent", "whitespace", "semicolons"]
+        },
+        "environment": {
+            "strong": ["setup", "scaffold", "boilerplate", "environment",
+                       "infrastructure", "ci/cd", "pipeline", "deploy",
+                       "project initialization", "dev environment"],
+            "weak": ["configure", "install", "docker", "terraform",
+                      "github actions", ".env", "toolchain"]
+        },
+        "convention": {
+            "strong": ["convention", "naming", "camelCase", "PascalCase",
+                       "snake_case", "agreed", "team standard"],
+            "weak": ["prefer", "consistently", "standardize", "uniform"]
+        }
+    }
+
+    scores = {}
+    for entry_type, indicators in type_indicators.items():
+        strong_count = sum(1 for ind in indicators["strong"] if ind in combined)
+        weak_count = sum(1 for ind in indicators["weak"] if ind in combined)
+        score = (strong_count * 2 + weak_count) / (len(indicators["strong"]) + len(indicators["weak"]))
+        scores[entry_type] = score
+
+    best_type = max(scores, key=scores.get)
+    confidence = scores[best_type]
+
+    # If nothing detected clearly, default to convention
+    if confidence < 0.1:
+        return "convention", 0.5
+
+    return best_type, min(1.0, confidence + 0.3)
+
+# Usage
+entry_type, confidence = detect_type(guidelines, topic, explicit_type)
+
+if confidence < 0.7 and not explicit_type:
+    return {
+        "status": "type_ambiguous",
+        "detected": entry_type,
+        "confidence": confidence,
+        "options": ["convention", "rule", "pattern", "guide", "documentation", "reference", "style", "environment"]
+    }
+else:
+    use_detected_type(entry_type)
+```
+
 **Tags:**
 Extract 3-5 relevant keywords from:
 - Input text (camelCase, async, hooks)
@@ -378,7 +466,7 @@ Detailed guidelines...
 
 ```yaml
 ---
-type: convention
+type: {type}
 version: {version}
 scope: {scope}
 category: {category}
@@ -387,6 +475,7 @@ tags: [{tag1}, {tag2}, {tag3}]
 ```
 
 Validate format before writing:
+- type must be one of: convention, rule, pattern, guide, documentation, reference, style, environment
 - version must match pattern: `\d+\.\d+`
 - scope must be non-empty string
 - category must be one of predefined categories
@@ -572,6 +661,7 @@ Run post-write validation checks:
 
 - [ ] YAML front matter parses correctly
 - [ ] Required fields present: type, version, scope, category, tags
+- [ ] Type field is one of valid values: convention, rule, pattern, guide, documentation, reference, style, environment
 - [ ] Version format valid (e.g., 1.0, 1.1, 2.0)
 - [ ] Required sections present (Title, Description, Format)
 - [ ] Code blocks have language tags
